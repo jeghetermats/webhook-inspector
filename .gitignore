@@ -1,0 +1,30 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.trx
+appsettings.Development.local.json
+
+# Node / Vite
+node_modules/
+web/dist/
+web/coverage/
+web/test-results/
+web/playwright-report/
+
+# Built SPA copied into the API
+src/WebhookInspector.Api/wwwroot/
+
+# Editors and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets
+.env
+*.env.local
