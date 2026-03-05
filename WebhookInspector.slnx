@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WebhookInspector.Api/WebhookInspector.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WebhookInspector.Api.Tests/WebhookInspector.Api.Tests.csproj" />
+  </Folder>
+</Solution>
