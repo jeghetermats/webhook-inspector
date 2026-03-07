@@ -1,16 +1,17 @@
 using System.Net;
-using Microsoft.AspNetCore.Mvc.Testing;
+using WebhookInspector.Api.Tests.Infrastructure;
 
 namespace WebhookInspector.Api.Tests;
 
-public class HealthTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+[Collection(PostgresCollection.Name)]
+public class HealthTests(PostgresFixture fixture)
 {
-    [Fact]
-    public async Task Live_returns_200()
+    [Theory]
+    [InlineData("/health/live")]
+    [InlineData("/health/ready")]
+    public async Task Health_endpoints_return_200(string path)
     {
-        var client = factory.CreateClient();
-
-        var response = await client.GetAsync("/health/live");
+        var response = await fixture.Api.CreateClient().GetAsync(path);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
