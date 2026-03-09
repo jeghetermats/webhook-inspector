@@ -1,16 +1,23 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace WebhookInspector.Api.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<User> Users => Set<User>();
 
     public DbSet<WebhookEndpoint> Endpoints => Set<WebhookEndpoint>();
 
     public DbSet<CapturedRequest> CapturedRequests => Set<CapturedRequest>();
+
+    /// <summary>
+    /// ASP.NET Core Data Protection keys, so auth and antiforgery cookies stay valid across
+    /// restarts and deploys. Not encrypted at the application level in v1 (see PLAN.md section 7).
+    /// </summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
