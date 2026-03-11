@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using WebhookInspector.Api.Auth;
 using WebhookInspector.Api.Capture;
 using WebhookInspector.Api.Data;
+using WebhookInspector.Api.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,9 +26,14 @@ builder.Services.AddDataProtection()
     .PersistKeysToDbContext<AppDbContext>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddProblemDetails();
+
 builder.Services.Configure<CaptureOptions>(builder.Configuration.GetSection(CaptureOptions.SectionName));
 builder.Services.AddScoped<CaptureStore>();
 builder.Services.AddCaptureRateLimiting();
+
+builder.Services.AddAppAuthentication(builder.Configuration);
+builder.Services.AddAppAntiforgery();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>(tags: ["ready"]);
@@ -53,9 +60,24 @@ if (useForwardedHeaders)
     app.UseForwardedHeaders();
 }
 
+app.UseSecurityHeaders();
 app.UseRateLimiter();
 
+// The capture route is a separate pipeline (PLAN.md section 2): it never reads cookies,
+// never needs antiforgery, and its errors are handled inside the route so that request
+// data cannot end up in exception logs. Everything else gets the full pipeline.
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/h"),
+    branch =>
+    {
+        branch.UseExceptionHandler();
+        branch.UseAuthentication();
+        branch.UseAuthorization();
+        branch.UseMiddleware<AntiforgeryValidationMiddleware>();
+    });
+
 app.MapCapture();
+app.MapAuth();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
