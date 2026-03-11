@@ -19,8 +19,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     /// </summary>
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
+    /// <summary>
+    /// Maps to Postgres <c>substring(bytea, start, count)</c>, so list queries can return a
+    /// short body preview without loading whole bodies. Only usable inside LINQ queries.
+    /// </summary>
+    public static byte[] BytesPrefix(byte[] bytes, int start, int count) =>
+        throw new NotSupportedException("Only for use in database queries.");
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDbFunction(typeof(AppDbContext).GetMethod(nameof(BytesPrefix))!)
+            .HasName("substring")
+            .IsBuiltIn();
+
         modelBuilder.Entity<User>(user =>
         {
             user.ToTable("User");

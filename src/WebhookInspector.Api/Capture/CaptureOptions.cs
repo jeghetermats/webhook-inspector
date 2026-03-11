@@ -14,6 +14,9 @@ public sealed class CaptureOptions
     /// <summary>Most body bytes stored per endpoint at any time (headers not counted).</summary>
     public long MaxBodyBytesPerEndpoint { get; set; } = 50L * 1024 * 1024;
 
+    /// <summary>Most endpoints one user can own.</summary>
+    public int MaxEndpointsPerUser { get; set; } = 10;
+
     /// <summary>Requests per minute allowed for one capture token.</summary>
     public int PermitsPerTokenPerMinute { get; set; } = 120;
 

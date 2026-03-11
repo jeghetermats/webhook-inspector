@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using WebhookInspector.Api.Api;
 using WebhookInspector.Api.Auth;
 using WebhookInspector.Api.Capture;
 using WebhookInspector.Api.Data;
@@ -78,6 +79,7 @@ app.UseWhen(
 
 app.MapCapture();
 app.MapAuth();
+app.MapApi();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
