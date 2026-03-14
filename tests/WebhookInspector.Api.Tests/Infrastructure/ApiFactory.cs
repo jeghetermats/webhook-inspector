@@ -26,6 +26,10 @@ public sealed class ApiFactory(string connectionString, IReadOnlyDictionary<stri
         }
 
         builder.ConfigureLogging(logging => logging.AddProvider(new TestLoggerProvider(Logs)));
-        builder.ConfigureServices(services => services.AddSingleton(Logs));
+        builder.ConfigureServices(services =>
+        {
+            services.AddSingleton(Logs);
+            services.AddTransient<IStartupFilter, TestSignInStartupFilter>();
+        });
     }
 }

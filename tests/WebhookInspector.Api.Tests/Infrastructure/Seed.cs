@@ -11,15 +11,13 @@ public sealed record SeededEndpoint(Guid UserId, Guid EndpointId, string Token)
 
 public static class Seed
 {
-    private static long _nextGitHubId = 1_000_000;
-
     public static async Task<SeededEndpoint> EndpointAsync(PostgresFixture fixture)
     {
         await using var db = fixture.CreateDbContext();
         var user = new User
         {
             Id = Guid.CreateVersion7(),
-            GitHubId = Interlocked.Increment(ref _nextGitHubId),
+            GitHubId = TestIds.NextGitHubId(),
             Login = "test-user",
             CreatedAt = DateTimeOffset.UtcNow,
         };
