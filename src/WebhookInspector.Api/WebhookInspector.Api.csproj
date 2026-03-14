@@ -1,8 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>WebhookInspector.Api</RootNamespace>
+    <UserSecretsId>6cb84aa4-2d30-4193-a73f-f3a8558c1069</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
