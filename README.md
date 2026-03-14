@@ -33,11 +33,47 @@ npm install
 npm run dev
 ```
 
-Send a request to a capture URL (create an endpoint first; until phase 2 adds the UI, insert one directly in the database):
+### GitHub sign-in for local development
+
+1. Create an OAuth app at <https://github.com/settings/developers> with
+   - Homepage URL: `http://localhost:5173`
+   - Authorization callback URL: `http://localhost:5173/signin-github`
+2. Store its credentials as user secrets (never in `appsettings`):
+
+   ```bash
+   dotnet user-secrets set "Authentication:GitHub:ClientId" "<client id>" --project src/WebhookInspector.Api
+   dotnet user-secrets set "Authentication:GitHub:ClientSecret" "<client secret>" --project src/WebhookInspector.Api
+   ```
+
+3. Open <http://localhost:5173/auth/login>. Without these settings `/auth/login` returns `503`; everything else still works.
+
+Browsers treat `http://localhost` as a secure context, so the `Secure` cookies work locally without HTTPS.
+
+Send a request to an endpoint's capture URL:
 
 ```bash
 curl -X POST "http://localhost:5080/h/<token>/github?x=1" -H "Content-Type: application/json" -d '{"hello":"world"}'
 ```
+
+## API
+
+All `/api` routes need a signed-in user. Every non-GET request under `/api` and `/auth` needs the antiforgery token from `GET /api/antiforgery` in the `X-XSRF-TOKEN` header. Another user's resources return `404`.
+
+| Method | Route | Purpose |
+|---|---|---|
+| ANY | `/h/{token}/{**path}` | Public capture route (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS) |
+| GET | `/auth/login?returnUrl=` | Sign in with GitHub |
+| POST | `/auth/logout` | Sign out |
+| GET | `/api/antiforgery` | Issue the antiforgery token |
+| GET | `/api/me` | Current user |
+| GET, POST | `/api/endpoints` | List with usage / create (max 10) |
+| PATCH, DELETE | `/api/endpoints/{id}` | Rename / delete with all requests |
+| POST | `/api/endpoints/{id}/rotate-token` | New capture URL; the old one stops working |
+| DELETE | `/api/endpoints/{id}/requests` | Clear history |
+| GET | `/api/endpoints/{id}/requests?cursor=&limit=&method=&pathPrefix=&from=&to=` | Newest first, keyset pagination |
+| GET, DELETE | `/api/requests/{id}` | Full detail / delete one |
+| GET | `/api/requests/{id}/body` | Raw body as an attachment |
+| GET | `/health/live`, `/health/ready` | Liveness / database readiness |
 
 ## Limits
 
