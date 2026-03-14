@@ -14,6 +14,7 @@ public static class AntiforgerySetup
         {
             options.HeaderName = HeaderName;
             options.Cookie.Name = "__Host-wi-af";
+            options.Cookie.Path = "/";
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
             options.Cookie.SameSite = SameSiteMode.Strict;
         });

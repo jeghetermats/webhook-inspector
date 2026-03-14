@@ -33,6 +33,7 @@ public static class EndpointsApi
     private static IQueryable<EndpointDto> OwnedBy(this IQueryable<WebhookEndpoint> endpoints, Guid userId) =>
         endpoints
             .Where(e => e.OwnerId == userId)
+            .OrderBy(e => e.CreatedAt)
             .Select(e => new EndpointDto(
                 e.Id,
                 e.Name,
@@ -42,7 +43,7 @@ public static class EndpointsApi
                 e.Requests.Sum(r => (long)r.BodySize)));
 
     private static async Task<List<EndpointDto>> ListAsync(ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
-        await db.Endpoints.OwnedBy(user.GetUserId()).OrderBy(e => e.CreatedAt).ToListAsync(ct);
+        await db.Endpoints.OwnedBy(user.GetUserId()).ToListAsync(ct);
 
     private static async Task<IResult> CreateAsync(
         EndpointNameRequest body,
@@ -75,7 +76,7 @@ public static class EndpointsApi
             OwnerId = userId,
             Name = body.Name!.Trim(),
             CaptureToken = CaptureToken.Generate(),
-            CreatedAt = time.GetUtcNow(),
+            CreatedAt = time.GetUtcNowForDb(),
         };
         db.Endpoints.Add(endpoint);
         await db.SaveChangesAsync(ct);

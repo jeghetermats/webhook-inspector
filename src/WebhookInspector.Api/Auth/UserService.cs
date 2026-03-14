@@ -12,7 +12,7 @@ public sealed class UserService(AppDbContext db, TimeProvider time)
     public async Task<Guid> UpsertFromGitHubAsync(long gitHubId, string login, CancellationToken cancellationToken)
     {
         var newId = Guid.CreateVersion7();
-        var now = time.GetUtcNow();
+        var now = time.GetUtcNowForDb();
         var ids = await db.Database.SqlQuery<Guid>($"""
             INSERT INTO "User" ("Id", "GitHubId", "Login", "CreatedAt")
             VALUES ({newId}, {gitHubId}, {login}, {now})

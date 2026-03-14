@@ -53,7 +53,7 @@ public static class CaptureEndpoints
         var captured = new CapturedRequest
         {
             Id = Guid.CreateVersion7(),
-            ReceivedAt = time.GetUtcNow(),
+            ReceivedAt = time.GetUtcNowForDb(),
             Method = method,
             Path = path,
             RawQuery = rawQuery,
@@ -117,9 +117,10 @@ public static class CaptureEndpoints
         }
         else
         {
-            // Fallback: decoded path plus the query string ASP.NET Core parsed.
+            // Fallback when the server does not expose the raw target: re-encode the
+            // decoded path, and use the query string, which ASP.NET Core keeps encoded.
             context.Request.Path.StartsWithSegments(prefix, out var remaining);
-            rest = remaining.Value + context.Request.QueryString.Value;
+            rest = remaining.ToUriComponent() + context.Request.QueryString.Value;
         }
 
         var queryStart = rest.IndexOf('?');

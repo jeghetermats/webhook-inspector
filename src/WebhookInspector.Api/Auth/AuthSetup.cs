@@ -20,6 +20,7 @@ public static class AuthSetup
             {
                 // __Host- prefix: browser only accepts it with Secure, Path=/ and no Domain.
                 options.Cookie.Name = AuthCookieName;
+                options.Cookie.Path = "/";
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Lax;
