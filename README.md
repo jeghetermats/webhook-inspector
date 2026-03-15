@@ -35,9 +35,9 @@ npm run dev
 
 ### GitHub sign-in for local development
 
-1. Create an OAuth app at <https://github.com/settings/developers> with
+1. Create an OAuth app (not a GitHub App, see [ADR 0011](docs/decisions/0011-github-oauth-app-for-sign-in.md)) at <https://github.com/settings/developers> with
    - Homepage URL: `http://localhost:5173`
-   - Authorization callback URL: `http://localhost:5173/signin-github`
+   - Redirect URI: `http://localhost:5173/signin-github` (wildcard matching and device flow off)
 2. Store its credentials as user secrets (never in `appsettings`):
 
    ```bash
