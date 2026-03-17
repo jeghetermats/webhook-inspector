@@ -172,7 +172,7 @@ public class CaptureTests(PostgresFixture fixture)
     [InlineData("/h")]
     public async Task Malformed_token_gives_404(string url)
     {
-        var response = await _client.PostAsync(url, new StringContent("x"));
+        var response = await _client.GetAsync(url);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }

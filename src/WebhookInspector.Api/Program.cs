@@ -7,6 +7,7 @@ using WebhookInspector.Api.Auth;
 using WebhookInspector.Api.Capture;
 using WebhookInspector.Api.Data;
 using WebhookInspector.Api.Security;
+using WebhookInspector.Api.Spa;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,6 +63,7 @@ if (useForwardedHeaders)
 }
 
 app.UseSecurityHeaders();
+app.UseSpaStaticFiles();
 app.UseRateLimiter();
 
 // The capture route is a separate pipeline (PLAN.md section 2): it never reads cookies,
@@ -83,6 +85,7 @@ app.MapApi();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
+app.MapSpaFallback();
 
 app.Run();
 
