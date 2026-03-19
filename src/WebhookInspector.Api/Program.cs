@@ -8,6 +8,7 @@ using WebhookInspector.Api.Capture;
 using WebhookInspector.Api.Data;
 using WebhookInspector.Api.Security;
 using WebhookInspector.Api.Spa;
+using WebhookInspector.Api.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +37,8 @@ builder.Services.AddCaptureRateLimiting();
 
 builder.Services.AddAppAuthentication(builder.Configuration);
 builder.Services.AddAppAntiforgery();
+
+builder.AddAppTelemetry();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>(tags: ["ready"]);
