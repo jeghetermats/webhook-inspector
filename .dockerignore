@@ -1,0 +1,17 @@
+**/bin/
+**/obj/
+**/node_modules/
+web/dist/
+**/TestResults/
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+tests/
+docs/
+infra/
+load/
+*.md
+Dockerfile
+.dockerignore
