@@ -19,8 +19,9 @@ COPY src/ src/
 RUN dotnet publish src/WebhookInspector.Api -c Release -o /out --no-restore /p:UseAppHost=false
 # A self-contained executable that applies pending migrations. Run by the migrate job
 # before each app update; the app itself never migrates at startup (PLAN.md section 11).
+# Framework-dependent: the runtime image already has .NET, so the bundle stays small.
 RUN dotnet ef migrations bundle --project src/WebhookInspector.Api --configuration Release \
-      --self-contained --target-runtime linux-x64 --output /migrate/efbundle
+      --target-runtime linux-x64 --output /migrate/efbundle
 
 # 3. Runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
