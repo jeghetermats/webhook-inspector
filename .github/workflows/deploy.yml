@@ -1,0 +1,81 @@
+# Deploys main after CI has passed: build image, apply migrations with the new image,
+# and only then switch the app to it (PLAN.md section 11, ADR 0008).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# deploy.yml and infra.yml never run at the same time.
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-webhook-inspector
+  APP_NAME: ca-webhook-inspector
+  MIGRATE_JOB: caj-webhook-inspector-migrate
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    uses: ./.github/workflows/build-image.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # OIDC login to Azure, no stored credential
+    env:
+      IMAGE: ${{ needs.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --yes --only-show-errors
+
+      - name: Check that the infrastructure exists
+        id: infra
+        run: |
+          if az containerapp show -g "$RESOURCE_GROUP" -n "$APP_NAME" -o none 2>/dev/null; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The Container App does not exist yet. Run the Infra workflow first. The image was pushed; nothing was deployed."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply migrations with the new image
+        if: steps.infra.outputs.ready == 'true'
+        run: bash .github/scripts/run-migration.sh "$RESOURCE_GROUP" "$MIGRATE_JOB" "$IMAGE"
+
+      - name: Update the app
+        if: steps.infra.outputs.ready == 'true'
+        run: az containerapp update -g "$RESOURCE_GROUP" -n "$APP_NAME" --image "$IMAGE" -o none --only-show-errors
+
+      - name: Wait until healthy
+        if: steps.infra.outputs.ready == 'true'
+        run: |
+          fqdn=$(az containerapp show -g "$RESOURCE_GROUP" -n "$APP_NAME" --query properties.configuration.ingress.fqdn -o tsv)
+          bash .github/scripts/wait-healthy.sh "https://$fqdn"
+          echo "Deployed \`$IMAGE\` to https://$fqdn" >> "$GITHUB_STEP_SUMMARY"

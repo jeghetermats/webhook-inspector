@@ -1,0 +1,99 @@
+# Creates or updates the Azure resources from infra/main.bicep. Run manually.
+# It keeps the app on the image it already runs; on the very first run it uses an image
+# built from this commit. Code changes are deployed by deploy.yml.
+name: Infra
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-webhook-inspector
+  APP_NAME: ca-webhook-inspector
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-image.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      ref: ${{ github.sha }}
+
+  infra:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --yes --only-show-errors
+
+      - name: Choose image
+        id: image
+        env:
+          NEW_IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          current=$(az containerapp show -g "$RESOURCE_GROUP" -n "$APP_NAME" \
+            --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)
+          image="${current:-$NEW_IMAGE}"
+          echo "Using $image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Bicep
+        id: deploy
+        env:
+          APP_IMAGE: ${{ steps.image.outputs.image }}
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+          GH_OAUTH_CLIENT_ID: ${{ vars.GH_OAUTH_CLIENT_ID }}
+          GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+          BUDGET_ALERT_EMAIL: ${{ vars.BUDGET_ALERT_EMAIL }}
+        run: |
+          az deployment group create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "infra-${{ github.run_number }}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              appImage="$APP_IMAGE" \
+              postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
+              githubClientId="$GH_OAUTH_CLIENT_ID" \
+              githubClientSecret="$GH_OAUTH_CLIENT_SECRET" \
+              budgetContactEmail="$BUDGET_ALERT_EMAIL" \
+            --query properties.outputs -o json > outputs.json
+          {
+            echo "url=$(jq -r .appUrl.value outputs.json)"
+            echo "job=$(jq -r .migrateJobName.value outputs.json)"
+            echo "workspace=$(jq -r .logAnalyticsWorkspaceId.value outputs.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apply migrations
+        run: bash .github/scripts/run-migration.sh "$RESOURCE_GROUP" "${{ steps.deploy.outputs.job }}" "${{ steps.image.outputs.image }}"
+
+      - name: Wait until healthy
+        run: bash .github/scripts/wait-healthy.sh "${{ steps.deploy.outputs.url }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Infrastructure deployed"
+            echo "- App: ${{ steps.deploy.outputs.url }}"
+            echo "- Image: \`${{ steps.image.outputs.image }}\`"
+            echo "- Log Analytics workspace id: \`${{ steps.deploy.outputs.workspace }}\`"
+            echo "- Production OAuth callback URL: ${{ steps.deploy.outputs.url }}/signin-github"
+          } >> "$GITHUB_STEP_SUMMARY"
