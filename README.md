@@ -90,3 +90,68 @@ All `/api` routes need a signed-in user. Every non-GET request under `/api` and 
 dotnet test          # backend; Docker must be running for the integration tests
 cd web && npm test   # frontend
 ```
+
+## Deployment (Azure)
+
+Everything runs in one resource group, `rg-webhook-inspector` (Norway East), defined in [`infra/main.bicep`](infra/main.bicep):
+
+| Resource | Setting |
+|---|---|
+| Container App `ca-webhook-inspector` | 0.25 vCPU, 0.5 GiB, 0 to 1 replicas, external HTTPS ingress |
+| Container Apps Job `caj-webhook-inspector-migrate` | Manual trigger, runs the EF Core migration bundle from the image |
+| PostgreSQL Flexible Server | Burstable B1MS, 32 GB, Postgres 17 |
+| Log Analytics + Application Insights | 0.15 GB/day ingestion cap, 30 days retention |
+| Budget | Email at 5 and 20 USD of monthly usage (only a notification, not a cap) |
+
+### Pipelines
+
+- **CI** (`ci.yml`): every push and pull request. Backend tests with Testcontainers, frontend lint/typecheck/tests/build, Bicep build and Docker build.
+- **Deploy** (`deploy.yml`): after CI succeeds on `main`. Pushes the image to GHCR, runs the migrate job with the new image, then updates the app ([ADR 0008](docs/decisions/0008-migrations-as-a-separate-job.md)).
+- **Infra** (`infra.yml`): manual. Deploys the Bicep and keeps the app on its current image.
+
+Both deploying workflows log in to Azure with OIDC through a managed identity, so no Azure credential is stored in GitHub ([ADR 0012](docs/decisions/0012-managed-identity-for-deploy-login.md)).
+
+### GitHub `production` environment
+
+| Type | Name | Purpose |
+|---|---|---|
+| Variable | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | OIDC login (managed identity `id-github-deploy`) |
+| Variable | `BUDGET_ALERT_EMAIL` | Where budget alerts go. Empty skips the budget |
+| Secret | `POSTGRES_ADMIN_PASSWORD` | Database administrator password |
+| Variable | `GH_OAUTH_CLIENT_ID` | Production GitHub OAuth app. Empty disables sign-in (`503`) |
+| Secret | `GH_OAUTH_CLIENT_SECRET` | Production GitHub OAuth app secret |
+
+### First deploy
+
+1. Push to `main`. CI runs, then Deploy builds and pushes the image. Its deploy step warns that the infrastructure does not exist yet; that is expected.
+2. Make the image public: GitHub profile → **Packages** → the package → **Package settings** → **Change visibility** → Public. Container Apps pulls it without credentials. The image contains no secrets.
+3. Run the **Infra** workflow (Actions → Infra → Run workflow). The first run takes 10 to 15 minutes, mostly for Postgres. The run summary shows the app URL.
+4. Create the production GitHub OAuth app with the redirect URI `<app URL>/signin-github`, set `GH_OAUTH_CLIENT_ID` and `GH_OAUTH_CLIENT_SECRET`, and run **Infra** again.
+5. Run the live secret check below. **Do not send real webhook data before it passes.**
+
+After that, every push to `main` deploys automatically once CI is green.
+
+### Live secret check
+
+[`scripts/check-telemetry-leak.ps1`](scripts/check-telemetry-leak.ps1) sends a unique secret in the body, headers, query and path to the live service, waits until the app's own log lines for those requests are in Log Analytics, and then searches every table for the secret and the capture token. Run it after the first deploy and after any telemetry change:
+
+```powershell
+az login
+./scripts/check-telemetry-leak.ps1 -BaseUrl https://<app URL> -Token <capture token of one of your endpoints>
+```
+
+Until the UI exists (phase 4), create an endpoint from the browser console while signed in on the live site:
+
+```js
+await fetch('/api/antiforgery');
+const xsrf = document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN=')).split('=')[1];
+const res = await fetch('/api/endpoints', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(xsrf) }, body: JSON.stringify({ name: 'leak check' }) });
+console.log((await res.json()).captureToken);
+```
+
+### Known limitations (v1)
+
+- Postgres accepts connections from any Azure service (Consumption Container Apps have no fixed outbound IP). TLS and the password protect it; private networking is a v2 improvement.
+- The app connects as the Postgres administrator. A separate least-privilege role is a v2 improvement.
+- Data Protection keys are stored unencrypted in the database (see [ADR 0002](docs/decisions/0002-cookie-authentication.md)).
+- The first request after a quiet period has a cold start of a few seconds ([ADR 0007](docs/decisions/0007-scale-to-zero.md)).
