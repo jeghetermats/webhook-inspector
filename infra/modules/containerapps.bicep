@@ -53,10 +53,20 @@ var appEnv = concat(
     : []
 )
 
-resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
+// environmentMode must be set explicitly: without it Azure creates an "express"
+// environment, which does not support jobs (ExpressEnvironmentResourceNotSupported).
+// The Consumption workload profile has the same pricing and free grant as before.
+resource environment 'Microsoft.App/managedEnvironments@2026-03-02-preview' = {
   name: 'cae-${name}'
   location: location
   properties: {
+    environmentMode: 'WorkloadProfiles'
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+    ]
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -67,11 +77,12 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
-resource app 'Microsoft.App/containerApps@2024-03-01' = {
+resource app 'Microsoft.App/containerApps@2026-03-02-preview' = {
   name: 'ca-${name}'
   location: location
   properties: {
     managedEnvironmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
@@ -149,11 +160,12 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 // Applies EF Core migrations from the new image before the app is updated (ADR 0008).
-resource migrateJob 'Microsoft.App/jobs@2024-03-01' = {
+resource migrateJob 'Microsoft.App/jobs@2026-03-02-preview' = {
   name: 'caj-${name}-migrate'
   location: location
   properties: {
     environmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       triggerType: 'Manual'
       replicaTimeout: 600
