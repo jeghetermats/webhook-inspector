@@ -58,10 +58,12 @@ jobs:
       - name: Check that the infrastructure exists
         id: infra
         run: |
-          if az containerapp show -g "$RESOURCE_GROUP" -n "$APP_NAME" -o none 2>/dev/null; then
+          # Both must exist: a partly failed Infra run can leave the app without the job.
+          if az containerapp show -g "$RESOURCE_GROUP" -n "$APP_NAME" -o none 2>/dev/null &&
+             az containerapp job show -g "$RESOURCE_GROUP" -n "$MIGRATE_JOB" -o none 2>/dev/null; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::The Container App does not exist yet. Run the Infra workflow first. The image was pushed; nothing was deployed."
+            echo "::warning::The Container App or the migrate job does not exist yet. Run the Infra workflow first. The image was pushed; nothing was deployed."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
