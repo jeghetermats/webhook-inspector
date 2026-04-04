@@ -84,6 +84,7 @@ app.UseWhen(
 
 app.MapCapture();
 app.MapAuth();
+app.MapTestSignIn();
 app.MapApi();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using WebhookInspector.Api.Api;
 using WebhookInspector.Api.Auth;
+using Microsoft.AspNetCore.Hosting;
 using WebhookInspector.Api.Tests.Infrastructure;
 
 namespace WebhookInspector.Api.Tests.Auth;
@@ -39,9 +40,9 @@ public class AuthTests(PostgresFixture fixture)
     {
         var client = fixture.Api.CreateBrowserClient();
 
-        var response = await client.PostAsync($"/test/login?githubId={TestIds.NextGitHubId()}&login=a", null);
+        var response = await client.PostAsync($"/test/sign-in?githubId={TestIds.NextGitHubId()}&login=a", null);
 
-        var cookie = TestSignIn.GetSetCookie(response, AuthSetup.AuthCookieName)?.ToLowerInvariant();
+        var cookie = TestSignInClient.GetSetCookie(response, AuthSetup.AuthCookieName)?.ToLowerInvariant();
         Assert.NotNull(cookie);
         Assert.Contains("httponly", cookie);
         Assert.Contains("secure", cookie);
@@ -81,7 +82,7 @@ public class AuthTests(PostgresFixture fixture)
 
         var response = await user.GetAsync("/api/antiforgery");
 
-        var cookie = TestSignIn.GetSetCookie(response, "XSRF-TOKEN")?.ToLowerInvariant();
+        var cookie = TestSignInClient.GetSetCookie(response, "XSRF-TOKEN")?.ToLowerInvariant();
         Assert.NotNull(cookie);
         Assert.DoesNotContain("httponly", cookie);
         Assert.Contains("secure", cookie);
@@ -159,10 +160,10 @@ public class AuthTests(PostgresFixture fixture)
         await using (var before = fixture.CreateApi())
         {
             signIn = await before.CreateBrowserClient()
-                .PostAsync($"/test/login?githubId={TestIds.NextGitHubId()}&login=restart", null);
+                .PostAsync($"/test/sign-in?githubId={TestIds.NextGitHubId()}&login=restart", null);
         }
 
-        var cookie = TestSignIn.GetCookieValue(signIn, AuthSetup.AuthCookieName)!;
+        var cookie = TestSignInClient.GetCookieValue(signIn, AuthSetup.AuthCookieName)!;
         await using var after = fixture.CreateApi();
         var client = after.CreateBrowserClient();
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/me");
@@ -173,4 +174,28 @@ public class AuthTests(PostgresFixture fixture)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("restart", (await response.Content.ReadFromJsonAsync<MeDto>())!.Login);
     }
+
+    [Fact]
+    public async Task Test_sign_in_does_not_exist_unless_enabled()
+    {
+        await using var api = fixture.CreateApi(new Dictionary<string, string?> { ["TestSignIn:Enabled"] = "false" });
+
+        var response = await api.CreateBrowserClient().PostAsync($"/test/sign-in?githubId={TestIds.NextGitHubId()}&login=x", null);
+
+        Assert.False(response.IsSuccessStatusCode);
+        Assert.Null(TestSignInClient.GetSetCookie(response, AuthSetup.AuthCookieName));
+    }
+
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Development")]
+    public void Test_sign_in_refuses_to_start_outside_the_testing_environment(string environment)
+    {
+        using var api = fixture.CreateApi().WithWebHostBuilder(builder => builder.UseEnvironment(environment));
+
+        var error = Assert.Throws<InvalidOperationException>(() => api.CreateClient());
+
+        Assert.Contains("TestSignIn:Enabled", error.Message);
+    }
 }
+
