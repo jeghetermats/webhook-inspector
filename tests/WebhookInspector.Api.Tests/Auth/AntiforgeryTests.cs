@@ -1,4 +1,6 @@
 using System.Net;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using WebhookInspector.Api.Api;
 using WebhookInspector.Api.Tests.Infrastructure;
 
@@ -73,5 +75,60 @@ public class AntiforgeryTests(PostgresFixture fixture)
         Assert.Equal(endpoint.CaptureToken, current.CaptureToken);
         Assert.Equal(1, current.RequestCount);
         Assert.Equal(HttpStatusCode.OK, (await user.GetAsync("/api/me")).StatusCode); // still signed in
+    }
+
+    [Fact]
+    public async Task Tokens_are_issued_and_accepted_over_plain_http_outside_production()
+    {
+        // Local development and the Playwright tests run on http://localhost. Browsers send
+        // Secure cookies to localhost over http, but .NET's cookie jar does not, so this test
+        // carries the cookies itself.
+        var client = fixture.Api.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost"),
+            HandleCookies = false,
+        });
+        var cookies = new Dictionary<string, string>();
+        void Remember(HttpResponseMessage response)
+        {
+            foreach (var header in response.Headers.TryGetValues("Set-Cookie", out var values) ? values : [])
+            {
+                var pair = header.Split(';')[0].Split('=', 2);
+                cookies[pair[0]] = pair[1];
+            }
+        }
+
+        HttpRequestMessage WithCookies(HttpRequestMessage request)
+        {
+            request.Headers.Add("Cookie", string.Join("; ", cookies.Select(c => $"{c.Key}={c.Value}")));
+            return request;
+        }
+
+        Remember(await client.PostAsync($"/test/sign-in?githubId={TestIds.NextGitHubId()}&login=http-user", null));
+        var tokenResponse = await client.SendAsync(WithCookies(new HttpRequestMessage(HttpMethod.Get, "/api/antiforgery")));
+        Remember(tokenResponse);
+
+        var create = WithCookies(new HttpRequestMessage(HttpMethod.Post, "/api/endpoints")
+        {
+            Content = System.Net.Http.Json.JsonContent.Create(new { name = "over http" }),
+        });
+        create.Headers.Add("X-XSRF-TOKEN", Uri.UnescapeDataString(cookies["XSRF-TOKEN"]));
+        var created = await client.SendAsync(create);
+
+        Assert.Equal(HttpStatusCode.NoContent, tokenResponse.StatusCode);
+        Assert.Contains("wi-af", cookies.Keys); // not __Host-, which would need Secure
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+    }
+
+    [Fact]
+    public async Task Production_uses_a_host_prefixed_https_only_cookie()
+    {
+        await using var api = fixture.CreateApi(new Dictionary<string, string?> { ["TestSignIn:Enabled"] = "false" })
+            .WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+
+        var options = api.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Antiforgery.AntiforgeryOptions>>().Value;
+
+        Assert.Equal("__Host-wi-af", options.Cookie.Name);
+        Assert.Equal(Microsoft.AspNetCore.Http.CookieSecurePolicy.Always, options.Cookie.SecurePolicy);
     }
 }

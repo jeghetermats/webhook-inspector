@@ -36,7 +36,7 @@ builder.Services.AddScoped<CaptureStore>();
 builder.Services.AddCaptureRateLimiting();
 
 builder.Services.AddAppAuthentication(builder.Configuration);
-builder.Services.AddAppAntiforgery();
+builder.Services.AddAppAntiforgery(builder.Environment);
 
 builder.AddAppTelemetry();
 

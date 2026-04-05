@@ -9,15 +9,24 @@ public static class AntiforgerySetup
     /// <summary>Readable by the SPA's JavaScript, which copies it into <see cref="HeaderName"/>.</summary>
     public const string RequestTokenCookieName = "XSRF-TOKEN";
 
-    public static IServiceCollection AddAppAntiforgery(this IServiceCollection services) =>
-        services.AddAntiforgery(options =>
+    /// <summary>
+    /// In production the cookie token uses the __Host- prefix and is HTTPS-only. Local
+    /// development and end-to-end tests run over http://localhost, where antiforgery refuses
+    /// to issue tokens for an HTTPS-only cookie (it throws), and a __Host- cookie without
+    /// Secure is rejected by browsers, so there the cookie follows the request scheme.
+    /// </summary>
+    public static IServiceCollection AddAppAntiforgery(this IServiceCollection services, IHostEnvironment environment)
+    {
+        var local = environment.IsDevelopment() || environment.IsEnvironment("Testing");
+        return services.AddAntiforgery(options =>
         {
             options.HeaderName = HeaderName;
-            options.Cookie.Name = "__Host-wi-af";
+            options.Cookie.Name = local ? "wi-af" : "__Host-wi-af";
             options.Cookie.Path = "/";
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = local ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
             options.Cookie.SameSite = SameSiteMode.Strict;
         });
+    }
 
     /// <summary>
     /// Issues a fresh token pair: the HttpOnly cookie token set by IAntiforgery, and the
@@ -29,7 +38,7 @@ public static class AntiforgerySetup
         context.Response.Cookies.Append(RequestTokenCookieName, tokens.RequestToken!, new CookieOptions
         {
             HttpOnly = false,
-            Secure = true,
+            Secure = context.Request.IsHttps,
             SameSite = SameSiteMode.Strict,
             Path = "/",
         });
