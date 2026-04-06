@@ -29,4 +29,5 @@ After the GitHub OAuth callback the server issues its own encrypted session cook
 - Cookies bring CSRF risk, covered by `SameSite=Lax` plus the antiforgery token. Both are tested on every state-changing route.
 - SignalR uses the same cookie automatically because it runs on the same origin.
 - The capture route (`/h/*`) runs in a pipeline branch without authentication, so it never reads or refreshes the cookie, even if a signed-in browser sends to it.
+- A signed-in browser that opens its own capture URL sends the session cookie along (`SameSite=Lax` allows top-level GETs, and a `__Host-` cookie must have `Path=/`, so it cannot be scoped away from `/h/`). The capture route therefore removes the app's own cookies from the stored `Cookie` header; otherwise a working session token would end up in the request history. Found during the phase 4 design review.
 - Data Protection keys are stored without application-level encryption in v1 (only the database's storage encryption). Anyone with database access could forge cookies. v2 can wrap the keys with Key Vault.

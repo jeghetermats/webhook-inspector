@@ -9,6 +9,9 @@ public static class AntiforgerySetup
     /// <summary>Readable by the SPA's JavaScript, which copies it into <see cref="HeaderName"/>.</summary>
     public const string RequestTokenCookieName = "XSRF-TOKEN";
 
+    public const string CookieTokenName = "__Host-wi-af";
+    public const string LocalCookieTokenName = "wi-af";
+
     /// <summary>
     /// In production the cookie token uses the __Host- prefix and is HTTPS-only. Local
     /// development and end-to-end tests run over http://localhost, where antiforgery refuses
@@ -21,7 +24,7 @@ public static class AntiforgerySetup
         return services.AddAntiforgery(options =>
         {
             options.HeaderName = HeaderName;
-            options.Cookie.Name = local ? "wi-af" : "__Host-wi-af";
+            options.Cookie.Name = local ? LocalCookieTokenName : CookieTokenName;
             options.Cookie.Path = "/";
             options.Cookie.SecurePolicy = local ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
             options.Cookie.SameSite = SameSiteMode.Strict;

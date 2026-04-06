@@ -188,6 +188,34 @@ public class CaptureTests(PostgresFixture fixture)
         Assert.Empty(await Seed.StoredAsync(fixture, endpoint.EndpointId));
     }
 
+    [Fact]
+    public async Task The_apps_own_cookies_are_never_stored()
+    {
+        var endpoint = await Seed.EndpointAsync(fixture);
+        var request = new HttpRequestMessage(HttpMethod.Get, endpoint.CaptureUrl());
+        request.Headers.Add(
+            "Cookie",
+            "__Host-wi-auth=session-secret; theme=dark; __Host-wi-authC1=chunk; XSRF-TOKEN=x; wi-af=y; __Host-wi-af=z; .AspNetCore.Correlation.abc=c; lang=nb");
+
+        await _client.SendAsync(request);
+
+        var stored = Assert.Single(await Seed.StoredAsync(fixture, endpoint.EndpointId));
+        Assert.Equal("theme=dark; lang=nb", Assert.Single(stored.Headers, h => h.Name == "Cookie").Value);
+    }
+
+    [Fact]
+    public async Task A_cookie_header_with_only_the_apps_cookies_is_dropped()
+    {
+        var endpoint = await Seed.EndpointAsync(fixture);
+        var request = new HttpRequestMessage(HttpMethod.Get, endpoint.CaptureUrl());
+        request.Headers.Add("Cookie", "__Host-wi-auth=session-secret; XSRF-TOKEN=x");
+
+        await _client.SendAsync(request);
+
+        var stored = Assert.Single(await Seed.StoredAsync(fixture, endpoint.EndpointId));
+        Assert.DoesNotContain(stored.Headers, h => h.Name == "Cookie");
+    }
+
     private sealed class NonSeekableStream(byte[] data) : MemoryStream(data)
     {
         public override bool CanSeek => false;

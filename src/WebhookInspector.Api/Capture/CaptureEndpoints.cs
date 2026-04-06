@@ -136,15 +136,42 @@ public static class CaptureEndpoints
         {
             foreach (var value in values)
             {
-                if (value is not null)
+                var stored = value is not null && name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)
+                    ? WithoutOwnCookies(value)
+                    : value;
+                if (stored is not null)
                 {
-                    entries.Add(new HeaderEntry(name, value));
+                    entries.Add(new HeaderEntry(name, stored));
                 }
             }
         }
 
         return entries;
     }
+
+    /// <summary>
+    /// Removes this app's own cookies from a captured Cookie header. A signed-in user who
+    /// opens their capture URL in the same browser sends their session cookie with it
+    /// (SameSite=Lax allows top-level GETs), and storing it would put a working session
+    /// token into the request history. Other cookies are kept: they are what was sent.
+    /// Returns null when nothing is left.
+    /// </summary>
+    internal static string? WithoutOwnCookies(string cookieHeader)
+    {
+        var kept = cookieHeader
+            .Split(';')
+            .Select(pair => pair.Trim())
+            .Where(pair => pair.Length > 0 && !IsOwnCookie(pair.Split('=', 2)[0].Trim()))
+            .ToList();
+        return kept.Count == 0 ? null : string.Join("; ", kept);
+    }
+
+    private static bool IsOwnCookie(string name) =>
+        name.StartsWith(Auth.AuthSetup.AuthCookieName, StringComparison.Ordinal) || // incl. chunked C1, C2, ...
+        name == Security.AntiforgerySetup.CookieTokenName ||
+        name == Security.AntiforgerySetup.LocalCookieTokenName ||
+        name == Security.AntiforgerySetup.RequestTokenCookieName ||
+        name.StartsWith(".AspNetCore.", StringComparison.Ordinal); // OAuth correlation and nonce cookies
 
     private static IPAddress? Normalize(IPAddress? address) =>
         address is { IsIPv4MappedToIPv6: true } ? address.MapToIPv4() : address;
