@@ -87,9 +87,12 @@ All `/api` routes need a signed-in user. Every non-GET request under `/api` and 
 ## Tests
 
 ```bash
-dotnet test          # backend; Docker must be running for the integration tests
-cd web && npm test   # frontend
+dotnet test          # backend integration tests; Docker must be running (Testcontainers)
+cd web && npm test   # frontend unit tests (body decoding, curl export, API client)
+cd web && npm run e2e  # Playwright end-to-end tests against the real app
 ```
+
+The end-to-end tests build the SPA, start the API in the `Testing` environment with test sign-in enabled, and use the docker-compose database (run `docker compose up -d` and `dotnet ef database update` first). Test sign-in (`POST /test/sign-in`) only exists when the environment is `Testing` **and** `TestSignIn:Enabled` is true; the app refuses to start if the flag is set anywhere else.
 
 ## Deployment (Azure)
 
@@ -140,14 +143,7 @@ az login
 ./scripts/check-telemetry-leak.ps1 -BaseUrl https://<app URL> -Token <capture token of one of your endpoints>
 ```
 
-Until the UI exists (phase 4), create an endpoint from the browser console while signed in on the live site:
-
-```js
-await fetch('/api/antiforgery');
-const xsrf = document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN=')).split('=')[1];
-const res = await fetch('/api/endpoints', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(xsrf) }, body: JSON.stringify({ name: 'leak check' }) });
-console.log((await res.json()).captureToken);
-```
+Create an endpoint called "leak check" in the live UI and pass the last part of its capture URL as `-Token`.
 
 ### Known limitations (v1)
 
