@@ -63,7 +63,13 @@ export function RequestsPane({ endpoint, selectedRequestId }: { endpoint: Endpoi
         <button
           type="button"
           className="button button-quiet"
-          onClick={() => queryClient.invalidateQueries({ queryKey: keys.requests(endpoint.id) })}
+          onClick={() =>
+            // Usage counts live on the endpoint, so refresh it together with the list.
+            Promise.all([
+              queryClient.invalidateQueries({ queryKey: keys.requests(endpoint.id) }),
+              queryClient.invalidateQueries({ queryKey: keys.endpoints }),
+            ])
+          }
           disabled={list.isFetching}
         >
           {list.isFetching && !list.isFetchingNextPage ? 'Refreshing…' : 'Refresh'}
