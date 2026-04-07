@@ -26,7 +26,9 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
 }
 
 // VerifyFull: encrypted and the server certificate is checked against the image's CA store.
-var postgresConnection = 'Host=${postgresHost};Database=${databaseName};Username=${postgresUser};Password=${postgresPassword};SSL Mode=VerifyFull'
+// GSS Encryption Mode=Disable: Azure uses TLS, and without it Npgsql first tries Kerberos
+// and logs an error because the image has no libgssapi.
+var postgresConnection = 'Host=${postgresHost};Database=${databaseName};Username=${postgresUser};Password=${postgresPassword};SSL Mode=VerifyFull;GSS Encryption Mode=Disable'
 
 var hasGitHub = !empty(githubClientId) && !empty(githubClientSecret)
 
