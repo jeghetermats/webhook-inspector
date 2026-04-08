@@ -131,6 +131,22 @@ public class AuthTests(PostgresFixture fixture)
         Assert.Contains(Uri.EscapeDataString("https://localhost/signin-github"), location);
     }
 
+    [Fact]
+    public async Task A_failed_GitHub_callback_redirects_to_the_sign_in_page_instead_of_500()
+    {
+        await using var api = fixture.CreateApi(new Dictionary<string, string?>
+        {
+            ["Authentication:GitHub:ClientId"] = "test-client-id",
+            ["Authentication:GitHub:ClientSecret"] = "test-client-secret",
+        });
+
+        // No correlation cookie and a bogus state: the remote handler fails.
+        var response = await api.CreateBrowserClient().GetAsync("/signin-github?code=abc&state=bogus");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/?signin=failed", response.Headers.Location!.ToString());
+    }
+
     [Theory]
     [InlineData(null, "/")]
     [InlineData("", "/")]

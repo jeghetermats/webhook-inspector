@@ -52,6 +52,15 @@ public static class AuthSetup
                 options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
 
+                // A failed sign-in (user cancelled, misconfigured OAuth app, expired state) would
+                // otherwise surface as an unhandled 500. The handler has already logged the cause.
+                options.Events.OnRemoteFailure = context =>
+                {
+                    context.Response.Redirect("/?signin=failed");
+                    context.HandleResponse();
+                    return Task.CompletedTask;
+                };
+
                 // Replace GitHub's claims with the app's own: the cookie carries our user id,
                 // and the GitHub id only for reference. No GitHub access token is stored.
                 options.SaveTokens = false;

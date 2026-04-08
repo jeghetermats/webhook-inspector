@@ -1,5 +1,9 @@
 export function SignIn() {
-  const returnUrl = window.location.pathname + window.location.search
+  const params = new URLSearchParams(window.location.search)
+  const failed = params.get('signin') === 'failed'
+  params.delete('signin')
+  const query = params.toString()
+  const returnUrl = window.location.pathname + (query ? `?${query}` : '')
   const loginUrl = `/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`
 
   return (
@@ -19,6 +23,11 @@ export function SignIn() {
           {'\n'}
           {'{ "ref": "refs/heads/main", "commits": 3 }'}
         </pre>
+        {failed ? (
+          <p className="error" role="alert">
+            Signing in with GitHub did not complete. Try again; if it keeps failing, the server log has the reason.
+          </p>
+        ) : null}
         <a className="button button-primary" href={loginUrl}>
           Sign in with GitHub
         </a>
