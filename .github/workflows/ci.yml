@@ -114,6 +114,7 @@ jobs:
 
       - name: Apply migrations
         run: |
+          dotnet restore
           dotnet tool restore
           dotnet ef database update --project src/WebhookInspector.Api
 
