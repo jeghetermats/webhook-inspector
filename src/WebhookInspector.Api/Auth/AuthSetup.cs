@@ -56,6 +56,14 @@ public static class AuthSetup
                 // otherwise surface as an unhandled 500. The handler has already logged the cause.
                 options.Events.OnRemoteFailure = context =>
                 {
+                    // Scheme and host decide the redirect_uri sent in the token request, so
+                    // logging them makes redirect_uri_mismatch errors diagnosable.
+                    var request = context.Request;
+                    context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("WebhookInspector.Auth")
+                        .LogWarning(
+                            "GitHub sign-in failed: {Reason}. Callback seen as {Scheme}://{Host}{Path}",
+                            context.Failure?.Message, request.Scheme, request.Host.Value, request.Path.Value);
                     context.Response.Redirect("/?signin=failed");
                     context.HandleResponse();
                     return Task.CompletedTask;
