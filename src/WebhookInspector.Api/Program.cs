@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using WebhookInspector.Api.Api;
 using WebhookInspector.Api.Auth;
@@ -43,27 +42,9 @@ builder.AddAppTelemetry();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>(tags: ["ready"]);
 
-// Behind the Azure Container Apps ingress the client IP arrives in X-Forwarded-For.
-// ForwardLimit = 1 takes only the entry appended by the ingress, so a client cannot
-// spoof its IP by sending its own X-Forwarded-For header.
-var useForwardedHeaders = builder.Configuration.GetValue<bool>("ForwardedHeaders:Enabled");
-if (useForwardedHeaders)
-{
-    builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        options.ForwardLimit = 1;
-        options.KnownIPNetworks.Clear();
-        options.KnownProxies.Clear();
-    });
-}
+builder.Services.AddAppForwardedHeaders(builder.Configuration);
 
 var app = builder.Build();
-
-if (useForwardedHeaders)
-{
-    app.UseForwardedHeaders();
-}
 
 app.UseSecurityHeaders();
 app.UseSpaStaticFiles();
@@ -72,6 +53,16 @@ app.UseRateLimiter();
 // The capture route is a separate pipeline (PLAN.md section 2): it never reads cookies,
 // never needs antiforgery, and its errors are handled inside the route so that request
 // data cannot end up in exception logs. Everything else gets the full pipeline.
+//
+// WebApplication inserts UseAuthentication/UseAuthorization at the very start of the
+// pipeline unless it sees them on the main builder, and it cannot see calls inside a
+// UseWhen branch. Its copy would run before the branch check (reading the session cookie
+// on /h) and handled the GitHub callback before anything else, which made the OAuth
+// redirect_uri wrong in production. These two flags (the keys the framework checks) tell
+// it that both are placed deliberately. AuthPipelineTests fail if that stops working.
+var pipeline = (IApplicationBuilder)app;
+pipeline.Properties["__AuthenticationMiddlewareSet"] = true;
+pipeline.Properties["__AuthorizationMiddlewareSet"] = true;
 app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/h"),
     branch =>

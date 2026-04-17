@@ -48,7 +48,7 @@ public sealed record SignInResult(Guid UserId);
 
 public static class TestSignInClient
 {
-    public static HttpClient CreateBrowserClient(this ApiFactory api) =>
+    public static HttpClient CreateBrowserClient(this WebApplicationFactory<Program> api) =>
         api.CreateClient(new WebApplicationFactoryClientOptions
         {
             // https, so the Secure auth and antiforgery cookies are sent back.
@@ -57,7 +57,7 @@ public static class TestSignInClient
             AllowAutoRedirect = false,
         });
 
-    public static async Task<TestUser> SignInAsync(this ApiFactory api, string? login = null, long? gitHubId = null)
+    public static async Task<TestUser> SignInAsync(this WebApplicationFactory<Program> api, string? login = null, long? gitHubId = null)
     {
         var client = api.CreateBrowserClient();
         var id = gitHubId ?? TestIds.NextGitHubId();
