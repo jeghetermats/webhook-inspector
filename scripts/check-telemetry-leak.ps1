@@ -5,8 +5,9 @@
 
 .DESCRIPTION
     Sends requests containing a unique secret in the body, headers, query and path to the live
-    capture route, waits until the app's own log lines from those requests have been ingested
-    (positive control), then searches every table in the workspace for the secret and the token.
+    capture route. Waits for two positive controls: the app's log lines for those requests in
+    the container logs, and a marker sent to an ordinary page in Application Insights. Then
+    checks that the search finds known text, and searches every table for the secret and token.
 
     PASS          the control lines arrived and the secret was found nowhere
     FAIL          the secret or the token was found (the matching rows are printed)
@@ -31,9 +32,25 @@ $ErrorActionPreference = 'Stop'
 $BaseUrl = $BaseUrl.TrimEnd('/')
 
 function Invoke-Kql([string] $Workspace, [string] $Query) {
-    $json = az monitor log-analytics query --workspace $Workspace --analytics-query $Query -o json --only-show-errors
-    if ($LASTEXITCODE -ne 0) { throw "Log Analytics query failed: $Query" }
-    return @($json | ConvertFrom-Json)
+    # The query goes through a file: quotes inside it do not survive az.cmd on Windows.
+    $file = New-TemporaryFile
+    try {
+        Set-Content -Path $file -Value $Query -NoNewline -Encoding ascii
+        $lines = az monitor log-analytics query --workspace $Workspace --analytics-query "@$file" -o json --only-show-errors
+        if ($LASTEXITCODE -ne 0) { throw "Log Analytics query failed: $Query" }
+    }
+    finally {
+        Remove-Item $file -ErrorAction SilentlyContinue
+    }
+    # az prints JSON over several lines, and Windows PowerShell does not unroll a parsed
+    # JSON array by itself, so join first and unroll explicitly.
+    $parsed = ($lines -join "`n") | ConvertFrom-Json
+    return @($parsed | ForEach-Object { $_ })
+}
+
+# Every table in the workspace, any column, substring match.
+function Find-InWorkspace([string] $Workspace, [string] $Text, [string] $Since) {
+    return Invoke-Kql $Workspace "union * | where TimeGenerated > datetime($Since) | where * contains '$Text' | project TimeGenerated, Type | take 20"
 }
 
 $workspace = az monitor log-analytics workspace show -g $ResourceGroup -n $WorkspaceName --query customerId -o tsv --only-show-errors
@@ -67,32 +84,45 @@ finally {
     Remove-Item $body -ErrorAction SilentlyContinue
 }
 
-# Positive control: the app logs one line per capture to stdout, which Container Apps
-# ships to ContainerAppConsoleLogs_CL without sampling.
+# Positive control for Application Insights: requests to an ordinary page are traced with
+# their path (only /h/* is redacted). 16 requests at 25 % sampling are all dropped with a
+# probability of about 1 %. Finding this marker proves App Insights data has arrived.
+$marker = 'leakcontrol' + [guid]::NewGuid().ToString('N')
+for ($i = 0; $i -lt 16; $i++) {
+    curl.exe -s -o NUL "$BaseUrl/$marker" | Out-Null
+}
+
+# Positive control for container logs: the app logs one line per capture to stdout, which
+# Container Apps ships to ContainerAppConsoleLogs_CL without sampling.
 $expected = $RequestsPerToken * $tokens.Count
 $controlQuery = @"
 ContainerAppConsoleLogs_CL
 | where TimeGenerated > datetime($start)
 | where Log_s has 'Capture rejected' or Log_s has 'Captured request'
-| count
+| summarize lines = count()
 "@
 $deadline = (Get-Date).AddMinutes($WaitMinutes)
 $seen = 0
+$traced = 0
 while ((Get-Date) -lt $deadline) {
-    $seen = [int](Invoke-Kql $workspace $controlQuery)[0].Count
-    Write-Host "Control lines ingested: $seen / $expected"
-    if ($seen -ge $expected) { break }
+    $seen = [int](Invoke-Kql $workspace $controlQuery)[0].lines
+    $traced = (Find-InWorkspace $workspace $marker $start).Count
+    Write-Host "Control: $seen / $expected log lines, App Insights marker found: $($traced -gt 0)"
+    if ($seen -ge $expected -and $traced -gt 0) { break }
     Start-Sleep -Seconds 60
 }
 
-# Give Application Insights (a separate ingestion path) a little extra time.
-Start-Sleep -Seconds 120
+# Self-check: the same search must find text that is known to be in the logs, or a
+# broken query would report "no leaks" for the wrong reason.
+if ((Find-InWorkspace $workspace 'Captured request' $start).Count -eq 0) {
+    Write-Host 'INCONCLUSIVE: the search did not find the known control text, so a clean result would mean nothing.' -ForegroundColor Yellow
+    exit 2
+}
 
 $needles = @($secret) + @($Token | Where-Object { $_ })
 $leaks = @()
 foreach ($needle in $needles) {
-    $leakQuery = "search `"*$needle*`" | where TimeGenerated > datetime($start) | project TimeGenerated, `$table | take 20"
-    $leaks += Invoke-Kql $workspace $leakQuery
+    $leaks += Find-InWorkspace $workspace $needle $start
 }
 
 if ($leaks.Count -gt 0) {
@@ -100,8 +130,8 @@ if ($leaks.Count -gt 0) {
     $leaks | Format-Table | Out-String | Write-Host
     exit 1
 }
-if ($seen -lt $expected) {
-    Write-Host "INCONCLUSIVE: only $seen of $expected control lines arrived. Run again later." -ForegroundColor Yellow
+if ($seen -lt $expected -or $traced -eq 0) {
+    Write-Host "INCONCLUSIVE: control data incomplete ($seen of $expected log lines, App Insights marker found: $($traced -gt 0)). Run again later." -ForegroundColor Yellow
     exit 2
 }
-Write-Host "PASS: $seen control lines ingested; the secret and token appear in no table." -ForegroundColor Green
+Write-Host "PASS: both controls arrived ($seen log lines, App Insights marker found); the secret and token appear in no table." -ForegroundColor Green
