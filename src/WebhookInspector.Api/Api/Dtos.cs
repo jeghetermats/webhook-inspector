@@ -22,7 +22,8 @@ public sealed record RequestSummaryDto(
     DateTimeOffset ReceivedAt,
     string? ContentType,
     int BodySize,
-    string? BodyPreview);
+    string? BodyPreview,
+    string Cursor);
 
 public sealed record RequestPageDto(IReadOnlyList<RequestSummaryDto> Items, string? NextCursor);
 

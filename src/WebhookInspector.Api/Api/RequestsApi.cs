@@ -119,12 +119,18 @@ public static class RequestsApi
 
         var items = rows.Take(pageSize)
             .Select(r => new RequestSummaryDto(
-                r.Id, r.Method, r.Path, r.RawQuery, r.ReceivedAt, r.ContentType, r.BodySize, BodyPreview.FromPrefix(r.Prefix)))
+                r.Id,
+                r.Method,
+                r.Path,
+                r.RawQuery,
+                r.ReceivedAt,
+                r.ContentType,
+                r.BodySize,
+                BodyPreview.FromPrefix(r.Prefix),
+                new RequestCursor(r.ReceivedAt, r.Id).Encode()))
             .ToList();
 
-        var nextCursor = rows.Count > pageSize
-            ? new RequestCursor(items[^1].ReceivedAt, items[^1].Id).Encode()
-            : null;
+        var nextCursor = rows.Count > pageSize ? items[^1].Cursor : null;
 
         return Results.Ok(new RequestPageDto(items, nextCursor));
     }
