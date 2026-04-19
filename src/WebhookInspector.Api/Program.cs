@@ -5,6 +5,7 @@ using WebhookInspector.Api.Api;
 using WebhookInspector.Api.Auth;
 using WebhookInspector.Api.Capture;
 using WebhookInspector.Api.Data;
+using WebhookInspector.Api.Live;
 using WebhookInspector.Api.Security;
 using WebhookInspector.Api.Spa;
 using WebhookInspector.Api.Telemetry;
@@ -32,6 +33,8 @@ builder.Services.AddProblemDetails();
 
 builder.Services.Configure<CaptureOptions>(builder.Configuration.GetSection(CaptureOptions.SectionName));
 builder.Services.AddScoped<CaptureStore>();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<RequestNotifier>();
 builder.Services.AddCaptureRateLimiting();
 
 builder.Services.AddAppAuthentication(builder.Configuration);
@@ -77,6 +80,7 @@ app.MapCapture();
 app.MapAuth();
 app.MapTestSignIn();
 app.MapApi();
+app.MapHub<RequestsHub>(RequestsHub.Path);
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });

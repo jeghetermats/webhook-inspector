@@ -5,8 +5,11 @@ using WebhookInspector.Api.Security;
 namespace WebhookInspector.Api.Tests.Infrastructure;
 
 /// <summary>A signed-in browser session: cookies plus the antiforgery request token.</summary>
-public sealed class TestUser(HttpClient client, Guid userId, long gitHubId, string login, string antiforgeryToken)
+public sealed class TestUser(HttpClient client, Guid userId, long gitHubId, string login, string antiforgeryToken, string authCookie)
 {
+    /// <summary>Value of the auth cookie, for clients that do not share the HttpClient's cookie jar (SignalR).</summary>
+    public string AuthCookie { get; } = authCookie;
+
     public HttpClient Client { get; } = client;
 
     public Guid UserId { get; } = userId;
@@ -66,13 +69,15 @@ public static class TestSignInClient
         var signIn = await client.PostAsync($"/test/sign-in?githubId={id}&login={Uri.EscapeDataString(login)}", null);
         signIn.EnsureSuccessStatusCode();
         var result = await signIn.Content.ReadFromJsonAsync<SignInResult>();
+        var authCookie = GetCookieValue(signIn, WebhookInspector.Api.Auth.AuthSetup.AuthCookieName)
+            ?? throw new InvalidOperationException("No auth cookie issued.");
 
         var tokenResponse = await client.GetAsync("/api/antiforgery");
         tokenResponse.EnsureSuccessStatusCode();
         var token = GetCookieValue(tokenResponse, AntiforgerySetup.RequestTokenCookieName)
             ?? throw new InvalidOperationException("No XSRF-TOKEN cookie issued.");
 
-        return new TestUser(client, result!.UserId, id, login, token);
+        return new TestUser(client, result!.UserId, id, login, token, authCookie);
     }
 
     public static string? GetSetCookie(HttpResponseMessage response, string name) =>

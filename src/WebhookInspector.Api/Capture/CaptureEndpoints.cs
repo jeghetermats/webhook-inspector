@@ -27,6 +27,7 @@ public static class CaptureEndpoints
         HttpContext context,
         string token,
         CaptureStore store,
+        Live.RequestNotifier notifier,
         IOptions<CaptureOptions> options,
         TimeProvider time,
         ILoggerFactory loggerFactory)
@@ -97,6 +98,8 @@ public static class CaptureEndpoints
                 logger.LogInformation(
                     "Captured request on endpoint {EndpointId}: {Method}, {BodySize} bytes, status {StatusCode}",
                     result.EndpointId, method, body.Length, StatusCodes.Status200OK);
+                // The transaction has committed, so anyone told about this request can load it.
+                await notifier.NotifyAsync(captured);
                 return HttpMethods.IsHead(method) ? Results.Ok() : Results.Json(new { ok = true });
         }
     }
