@@ -3,6 +3,8 @@ import { type FormEvent, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { keys, useEndpointMutations, useRequestList } from '../api/hooks'
 import { type Endpoint, LIMITS, type RequestFilters } from '../api/types'
+import { useLiveRequests } from '../live/useLiveRequests'
+import type { LiveStatus } from '../live/context'
 import { formatBytes } from '../lib/format'
 import { METHODS, captureUrl, formatRelative } from '../lib/http'
 import { CopyButton } from './CopyButton'
@@ -31,7 +33,8 @@ function isoToLocal(iso: string | undefined): string {
 export function RequestsPane({ endpoint, selectedRequestId }: { endpoint: Endpoint; selectedRequestId?: string }) {
   const [params, setParams] = useSearchParams()
   const filters = filtersFrom(params)
-  const list = useRequestList(endpoint.id, filters)
+  const liveStatus = useLiveRequests(endpoint.id, filters)
+  const list = useRequestList(endpoint.id, filters, liveStatus === 'live')
   const queryClient = useQueryClient()
   const search = params.toString() ? `?${params.toString()}` : ''
   const items = list.data?.pages.flatMap((page) => page.items) ?? []
@@ -60,6 +63,7 @@ export function RequestsPane({ endpoint, selectedRequestId }: { endpoint: Endpoi
         <span className="muted small">
           {list.isSuccess ? `${items.length}${list.hasNextPage ? '+' : ''} ${hasFilters ? 'matching ' : ''}requests` : ' '}
         </span>
+        <LiveIndicator status={liveStatus} />
         <button
           type="button"
           className="button button-quiet"
@@ -307,5 +311,20 @@ function FilterBar({ filters, onChange }: { filters: RequestFilters; onChange: (
         </button>
       ) : null}
     </form>
+  )
+}
+
+const LIVE_TEXT: Record<LiveStatus, string> = {
+  connecting: 'Connecting…',
+  live: 'Live',
+  reconnecting: 'Reconnecting…',
+  offline: 'Not live, use Refresh',
+}
+
+function LiveIndicator({ status }: { status: LiveStatus }) {
+  return (
+    <span className="live-indicator" data-status={status} role="status" title="New requests appear automatically while live.">
+      {LIVE_TEXT[status]}
+    </span>
   )
 }

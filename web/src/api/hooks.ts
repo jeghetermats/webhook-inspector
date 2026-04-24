@@ -29,12 +29,15 @@ export function useEndpoints() {
   return useQuery({ queryKey: keys.endpoints, queryFn: api.endpoints })
 }
 
-export function useRequestList(endpointId: string, filters: RequestFilters) {
+export function useRequestList(endpointId: string, filters: RequestFilters, live = false) {
   return useInfiniteQuery({
     queryKey: keys.requestList(endpointId, filters),
     queryFn: ({ pageParam }) => api.requests(endpointId, filters, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.nextCursor,
+    // A notification can be lost even while connected (PLAN.md section 8), so refetch
+    // regularly while live. Without a connection the user refreshes by hand.
+    refetchInterval: live ? 30_000 : false,
   })
 }
 

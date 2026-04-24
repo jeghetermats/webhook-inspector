@@ -429,6 +429,52 @@ a {
   margin-inline-start: -0.8rem;
 }
 
+/* Live status: a small dot that says whether new requests appear by themselves. */
+
+.live-indicator {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-inline-start: auto;
+  margin-inline-end: var(--space-2);
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+.live-indicator::before {
+  content: '';
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.live-indicator[data-status='live'] {
+  color: var(--m-get);
+}
+
+.live-indicator[data-status='live']::before {
+  background: var(--m-get);
+}
+
+.live-indicator[data-status='offline']::before {
+  background: var(--danger);
+}
+
+/* A row that arrived live gets a brief highlight, answering the event that added it. */
+
+@media (prefers-reduced-motion: no-preference) {
+  .request-list li {
+    animation: arrive 1.2s ease-out;
+  }
+
+  @keyframes arrive {
+    from {
+      background: var(--accent-soft);
+    }
+  }
+}
+
 /* Filters and list */
 
 .filters {

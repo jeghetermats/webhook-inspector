@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useSignOut } from '../api/hooks'
+import { LiveProvider } from '../live/LiveProvider'
 
 export function AppShell({ login, children }: { login: string; children: ReactNode }) {
   const signOut = useSignOut()
@@ -26,7 +27,7 @@ export function AppShell({ login, children }: { login: string; children: ReactNo
           </button>
         </div>
       </header>
-      {children}
+      <LiveProvider>{children}</LiveProvider>
     </div>
   )
 }
