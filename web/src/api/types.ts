@@ -28,6 +28,19 @@ export interface RequestSummary {
   contentType: string | null
   bodySize: number
   bodyPreview: string | null
+  /** Opaque pagination cursor pointing just after this item. */
+  cursor: string
+}
+
+/** Sent by the hub after a capture has been stored (metadata only, no body or headers). */
+export interface RequestReceivedEvent {
+  endpointId: string
+  requestId: string
+  method: string
+  path: string
+  receivedAt: string
+  bodySize: number
+  cursor: string
 }
 
 export interface RequestPage {
