@@ -74,6 +74,7 @@ All `/api` routes need a signed-in user. Every non-GET request under `/api` and 
 | GET, DELETE | `/api/requests/{id}` | Full detail / delete one |
 | GET | `/api/requests/{id}/body` | Raw body as an attachment |
 | GET | `/health/live`, `/health/ready` | Liveness / database readiness |
+| WS | `/hubs/requests` | SignalR hub (sign-in required): `Subscribe(endpointId)`, then `RequestReceived` events with id, method, path, time, size and cursor (no body, headers or query) |
 
 ## Limits
 
