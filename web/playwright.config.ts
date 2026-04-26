@@ -31,6 +31,9 @@ export default defineConfig({
       ASPNETCORE_URLS: `http://localhost:${port}`,
       ASPNETCORE_WEBROOT: webRoot,
       TestSignIn__Enabled: 'true',
+      // The reconnect test sends 120 requests to one endpoint in a few seconds.
+      Capture__PermitsPerTokenPerMinute: '1000',
+      Capture__PermitsPerIpPerMinute: '5000',
       ConnectionStrings__Postgres:
         process.env.E2E_POSTGRES ?? 'Host=localhost;Port=5432;Database=webhook_inspector;Username=webhook;Password=webhook',
     },
