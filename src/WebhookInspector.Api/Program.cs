@@ -6,6 +6,7 @@ using WebhookInspector.Api.Auth;
 using WebhookInspector.Api.Capture;
 using WebhookInspector.Api.Data;
 using WebhookInspector.Api.Live;
+using WebhookInspector.Api.Retention;
 using WebhookInspector.Api.Security;
 using WebhookInspector.Api.Spa;
 using WebhookInspector.Api.Telemetry;
@@ -33,6 +34,8 @@ builder.Services.AddProblemDetails();
 
 builder.Services.Configure<CaptureOptions>(builder.Configuration.GetSection(CaptureOptions.SectionName));
 builder.Services.AddScoped<CaptureStore>();
+builder.Services.Configure<RetentionOptions>(builder.Configuration.GetSection(RetentionOptions.SectionName));
+builder.Services.AddScoped<RetentionCleanup>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<RequestNotifier>();
 builder.Services.AddCaptureRateLimiting();
@@ -48,6 +51,15 @@ builder.Services.AddHealthChecks()
 builder.Services.AddAppForwardedHeaders(builder.Configuration);
 
 var app = builder.Build();
+
+// `dotnet WebhookInspector.Api.dll cleanup`: run the retention cleanup once and exit. Used by
+// the scheduled cleanup job, which runs the same image with this argument (ADR 0009).
+if (args is ["cleanup", ..])
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<RetentionCleanup>().RunAsync(CancellationToken.None);
+    return;
+}
 
 app.UseSecurityHeaders();
 app.UseSpaStaticFiles();
