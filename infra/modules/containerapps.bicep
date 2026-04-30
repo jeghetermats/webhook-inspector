@@ -201,6 +201,52 @@ resource migrateJob 'Microsoft.App/jobs@2026-03-02-preview' = {
   }
 }
 
+// Deletes requests older than 7 days, every hour at :17 (ADR 0009). Runs the app image
+// with the 'cleanup' argument and works while the app itself has scaled to zero.
+resource cleanupJob 'Microsoft.App/jobs@2026-03-02-preview' = {
+  name: 'caj-${name}-cleanup'
+  location: location
+  properties: {
+    environmentId: environment.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 600
+      replicaRetryLimit: 1
+      scheduleTriggerConfig: {
+        cronExpression: '17 * * * *'
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+      secrets: [
+        // Built from the @secure() password; the linter cannot see that through a variable.
+        #disable-next-line use-secure-value-for-secure-inputs
+        { name: 'postgres-connection', value: postgresConnection }
+        { name: 'appinsights-connection', value: appInsights.properties.ConnectionString }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'cleanup'
+          image: appImage
+          args: ['cleanup']
+          resources: {
+            cpu: json('0.25')
+            memory: '0.5Gi'
+          }
+          env: [
+            { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
+            { name: 'ConnectionStrings__Postgres', secretRef: 'postgres-connection' }
+            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-connection' }
+          ]
+        }
+      ]
+    }
+  }
+}
+
 output appName string = app.name
 output appFqdn string = app.properties.configuration.ingress.fqdn
 output migrateJobName string = migrateJob.name
+output cleanupJobName string = cleanupJob.name

@@ -87,4 +87,5 @@ module budget 'modules/budget.bicep' = if (!empty(budgetContactEmail)) {
 output appUrl string = 'https://${apps.outputs.appFqdn}'
 output appName string = apps.outputs.appName
 output migrateJobName string = apps.outputs.migrateJobName
+output cleanupJobName string = apps.outputs.cleanupJobName
 output logAnalyticsWorkspaceId string = monitoring.outputs.workspaceCustomerId

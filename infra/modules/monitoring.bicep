@@ -35,3 +35,17 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 output workspaceName string = workspace.name
 output workspaceCustomerId string = workspace.properties.customerId
 output appInsightsName string = appInsights.name
+
+// Operations dashboard: capture traffic and latency, errors, cleanup runs and failures.
+resource workbook 'Microsoft.Insights/workbooks@2023-06-01' = {
+  name: guid(resourceGroup().id, 'webhook-inspector-operations')
+  location: location
+  kind: 'shared'
+  properties: {
+    displayName: 'Webhook Inspector operations'
+    category: 'workbook'
+    sourceId: appInsights.id
+    serializedData: string(loadJsonContent('workbook.json'))
+  }
+}
+

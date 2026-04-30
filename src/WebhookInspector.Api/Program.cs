@@ -56,8 +56,13 @@ var app = builder.Build();
 // the scheduled cleanup job, which runs the same image with this argument (ADR 0009).
 if (args is ["cleanup", ..])
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<RetentionCleanup>().RunAsync(CancellationToken.None);
+    await using (var scope = app.Services.CreateAsyncScope())
+    {
+        await scope.ServiceProvider.GetRequiredService<RetentionCleanup>().RunAsync(CancellationToken.None);
+    }
+
+    // Disposing the app flushes telemetry, so the run shows up in Application Insights.
+    await app.DisposeAsync();
     return;
 }
 

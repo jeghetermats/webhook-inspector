@@ -1,0 +1,112 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "name": "intro",
+      "content": {
+        "json": "## Webhook Inspector operations\nCapture route traffic, latency and errors, retention cleanup runs, and failures that need attention. Request counts use `itemCount`, so they are correct despite sampling. Capture spans are redacted to `/h/{token}` before export."
+      }
+    },
+    {
+      "type": 9,
+      "name": "time",
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "b2a0d6c4-1f6b-4c51-9c6a-0b1f3c1a7e01",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 86400000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 3600000 },
+                { "durationMs": 14400000 },
+                { "durationMs": 86400000 },
+                { "durationMs": 604800000 }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": 3,
+      "name": "captures-by-status",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Captured requests by status (200 stored, 404 unknown token, 413 too large, 429 rate limit or quota)",
+        "query": "requests\n| where name has '/h/{token}'\n| summarize requests = sum(itemCount) by bin(timestamp, {TimeRange:grain}), resultCode\n| render timechart",
+        "size": 0,
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "name": "capture-latency",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Capture route latency (ms)",
+        "query": "requests\n| where name has '/h/{token}' and resultCode == '200'\n| summarize p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99) by bin(timestamp, {TimeRange:grain})\n| render timechart",
+        "size": 0,
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 3,
+      "name": "server-errors",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Server errors (5xx) by route",
+        "query": "requests\n| where toint(resultCode) >= 500\n| summarize errors = sum(itemCount) by name\n| order by errors desc",
+        "size": 1,
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "noDataMessage": "No server errors in this period."
+      }
+    },
+    {
+      "type": 3,
+      "name": "cleanup-runs",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Retention cleanup runs (hourly at :17)",
+        "query": "traces\n| where message startswith 'Retention cleanup deleted'\n| extend deleted = toint(customDimensions.DeletedCount)\n| project timestamp, deleted\n| order by timestamp desc",
+        "size": 1,
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "noDataMessage": "No cleanup runs in this period. The job runs every hour at :17."
+      }
+    },
+    {
+      "type": 3,
+      "name": "attention",
+      "content": {
+        "version": "KqlItem/1.0",
+        "title": "Needs attention: failed captures, sign-ins and live notifications",
+        "query": "traces\n| where message startswith 'Capture failed' or message startswith 'GitHub sign-in failed' or message startswith 'Live notification failed'\n| summarize count() by message = substring(message, 0, 120), bin(timestamp, 1h)\n| order by timestamp desc",
+        "size": 1,
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "visualization": "table",
+        "noDataMessage": "Nothing needs attention in this period."
+      }
+    }
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
