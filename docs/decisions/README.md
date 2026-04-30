@@ -12,6 +12,7 @@ Short records of decisions that shaped the project. Copy `0000-template.md` to s
 | [0006](0006-reject-when-quota-is-full.md) | Reject new requests when the quota is full | accepted |
 | [0007](0007-scale-to-zero.md) | Scale to zero and accept cold starts | accepted |
 | [0008](0008-migrations-as-a-separate-job.md) | Migrations as a separate job before the app update | accepted |
+| [0009](0009-cleanup-as-a-scheduled-job.md) | Retention cleanup as a separate scheduled job | accepted |
 | [0010](0010-live-view-contract.md) | Live view contract: the newest page is live, full history through pagination | accepted |
 | [0011](0011-github-oauth-app-for-sign-in.md) | GitHub OAuth app (not a GitHub App) for sign-in | accepted |
 | [0012](0012-managed-identity-for-deploy-login.md) | User-assigned managed identity for the deploy login | accepted |

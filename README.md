@@ -103,6 +103,8 @@ Everything runs in one resource group, `rg-webhook-inspector` (Norway East), def
 |---|---|
 | Container App `ca-webhook-inspector` | 0.25 vCPU, 0.5 GiB, 0 to 1 replicas, external HTTPS ingress |
 | Container Apps Job `caj-webhook-inspector-migrate` | Manual trigger, runs the EF Core migration bundle from the image |
+| Container Apps Job `caj-webhook-inspector-cleanup` | Every hour at :17, deletes requests older than 7 days ([ADR 0009](docs/decisions/0009-cleanup-as-a-scheduled-job.md)) |
+| Workbook "Webhook Inspector operations" | Capture traffic by status, latency p50/p95/p99, server errors, cleanup runs, failures that need attention |
 | PostgreSQL Flexible Server | Burstable B1MS, 32 GB, Postgres 17 |
 | Log Analytics + Application Insights | 0.15 GB/day ingestion cap, 30 days retention |
 | Budget | Email at 5 and 20 USD of monthly usage (only a notification, not a cap) |
