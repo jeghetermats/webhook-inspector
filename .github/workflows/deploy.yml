@@ -21,6 +21,7 @@ env:
   RESOURCE_GROUP: rg-webhook-inspector
   APP_NAME: ca-webhook-inspector
   MIGRATE_JOB: caj-webhook-inspector-migrate
+  CLEANUP_JOB: caj-webhook-inspector-cleanup
 
 jobs:
   build:
@@ -74,6 +75,15 @@ jobs:
       - name: Update the app
         if: steps.infra.outputs.ready == 'true'
         run: az containerapp update -g "$RESOURCE_GROUP" -n "$APP_NAME" --image "$IMAGE" -o none --only-show-errors
+
+      - name: Update the cleanup job
+        if: steps.infra.outputs.ready == 'true'
+        run: |
+          if az containerapp job show -g "$RESOURCE_GROUP" -n "$CLEANUP_JOB" -o none 2>/dev/null; then
+            az containerapp job update -g "$RESOURCE_GROUP" -n "$CLEANUP_JOB" --image "$IMAGE" -o none --only-show-errors
+          else
+            echo "::warning::The cleanup job does not exist yet. Run the Infra workflow to create it."
+          fi
 
       - name: Wait until healthy
         if: steps.infra.outputs.ready == 'true'
