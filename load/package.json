@@ -1,0 +1,11 @@
+{
+  "name": "webhook-inspector-load",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "notify-latency": "node notify-latency.mjs"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.11"
+  }
+}
