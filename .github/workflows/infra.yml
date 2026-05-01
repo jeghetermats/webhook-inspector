@@ -64,6 +64,9 @@ jobs:
           GH_OAUTH_CLIENT_ID: ${{ vars.GH_OAUTH_CLIENT_ID }}
           GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
           BUDGET_ALERT_EMAIL: ${{ vars.BUDGET_ALERT_EMAIL }}
+          # Optional, only for a load test; unset means the defaults (120 per token, 300 per IP).
+          PERMITS_PER_TOKEN: ${{ vars.CAPTURE_PERMITS_PER_TOKEN_PER_MINUTE || '120' }}
+          PERMITS_PER_IP: ${{ vars.CAPTURE_PERMITS_PER_IP_PER_MINUTE || '300' }}
         run: |
           az deployment group create \
             --resource-group "$RESOURCE_GROUP" \
@@ -75,6 +78,8 @@ jobs:
               githubClientId="$GH_OAUTH_CLIENT_ID" \
               githubClientSecret="$GH_OAUTH_CLIENT_SECRET" \
               budgetContactEmail="$BUDGET_ALERT_EMAIL" \
+              capturePermitsPerTokenPerMinute="$PERMITS_PER_TOKEN" \
+              capturePermitsPerIpPerMinute="$PERMITS_PER_IP" \
             --query properties.outputs -o json > outputs.json
           {
             echo "url=$(jq -r .appUrl.value outputs.json)"

@@ -29,6 +29,12 @@ param githubClientId string = ''
 @description('Client secret of the production GitHub OAuth app.')
 param githubClientSecret string = ''
 
+@description('Capture rate limit per token per minute. Raise only temporarily, for a load test.')
+param capturePermitsPerTokenPerMinute int = 120
+
+@description('Capture rate limit per source IP per minute. Raise only temporarily, for a load test.')
+param capturePermitsPerIpPerMinute int = 300
+
 @description('Email for budget alerts. Empty skips the budget.')
 param budgetContactEmail string = ''
 
@@ -72,6 +78,8 @@ module apps 'modules/containerapps.bicep' = {
     migrateImage: migrateImage
     githubClientId: githubClientId
     githubClientSecret: githubClientSecret
+    capturePermitsPerTokenPerMinute: capturePermitsPerTokenPerMinute
+    capturePermitsPerIpPerMinute: capturePermitsPerIpPerMinute
   }
 }
 

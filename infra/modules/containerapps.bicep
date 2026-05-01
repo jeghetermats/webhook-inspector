@@ -13,6 +13,8 @@ param postgresPassword string
 param appImage string
 param migrateImage string
 param githubClientId string
+param capturePermitsPerTokenPerMinute int
+param capturePermitsPerIpPerMinute int
 
 @secure()
 param githubClientSecret string
@@ -46,6 +48,8 @@ var appEnv = concat(
     { name: 'ForwardedHeaders__Enabled', value: 'true' }
     { name: 'ConnectionStrings__Postgres', secretRef: 'postgres-connection' }
     { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-connection' }
+    { name: 'Capture__PermitsPerTokenPerMinute', value: string(capturePermitsPerTokenPerMinute) }
+    { name: 'Capture__PermitsPerIpPerMinute', value: string(capturePermitsPerIpPerMinute) }
   ],
   hasGitHub
     ? [
