@@ -154,3 +154,25 @@ Create an endpoint called "leak check" in the live UI and pass the last part of 
 - The app connects as the Postgres administrator. A separate least-privilege role is a v2 improvement.
 - Data Protection keys are stored unencrypted in the database (see [ADR 0002](docs/decisions/0002-cookie-authentication.md)).
 - The first request after a quiet period has a cold start of a few seconds ([ADR 0007](docs/decisions/0007-scale-to-zero.md)).
+
+## Load test
+
+[`load/capture.js`](load/capture.js) (k6) sends webhooks to the live capture route at a constant rate and reports stored, rate-limited and failed requests and the latency of stored captures. [`load/notify-latency.mjs`](load/notify-latency.mjs) measures the time from sending a webhook to receiving its live notification over SignalR, the same path the browser uses. Both write JSON to `load/results`.
+
+```powershell
+# Capture load (k6 in Docker, nothing to install)
+docker run --rm -i -v "${PWD}/load:/load" -e BASE_URL=https://<app URL> -e TOKENS=<token1>,<token2> `
+  -e RATE=3 -e DURATION=3m -e LABEL=realistic grafana/k6 run /load/capture.js
+
+# Notification latency, in a second terminal while k6 runs. AUTH_COOKIE is the value of the
+# __Host-wi-auth cookie from your browser's dev tools: set it in your own terminal only.
+cd load; npm install
+$env:BASE_URL='https://<app URL>'; $env:ENDPOINT_ID='<id>'; $env:TOKEN='<token>'; $env:AUTH_COOKIE='<cookie>'
+npm run notify-latency
+```
+
+The capture route allows 120 requests/min per endpoint and 300/min per source IP, so a test from one machine at the default limits measures realistic traffic, not capacity. For a stress test the limits can be raised temporarily with the GitHub `production` variables `CAPTURE_PERMITS_PER_TOKEN_PER_MINUTE` and `CAPTURE_PERMITS_PER_IP_PER_MINUTE` and an Infra run, and removed again afterwards.
+
+### Results
+
+Pending: to be measured against the live service (phase 6).
