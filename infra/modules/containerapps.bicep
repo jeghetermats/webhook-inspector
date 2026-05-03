@@ -30,7 +30,9 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
 // VerifyFull: encrypted and the server certificate is checked against the image's CA store.
 // GSS Encryption Mode=Disable: Azure uses TLS, and without it Npgsql first tries Kerberos
 // and logs an error because the image has no libgssapi.
-var postgresConnection = 'Host=${postgresHost};Database=${databaseName};Username=${postgresUser};Password=${postgresPassword};SSL Mode=VerifyFull;GSS Encryption Mode=Disable'
+// Maximum Pool Size=20: B1MS allows 50 connections (some reserved by Azure). Npgsql's default
+// of 100 let an overloaded replica open more than the server accepts (phase 6 load test).
+var postgresConnection = 'Host=${postgresHost};Database=${databaseName};Username=${postgresUser};Password=${postgresPassword};SSL Mode=VerifyFull;GSS Encryption Mode=Disable;Maximum Pool Size=20'
 
 var hasGitHub = !empty(githubClientId) && !empty(githubClientSecret)
 
