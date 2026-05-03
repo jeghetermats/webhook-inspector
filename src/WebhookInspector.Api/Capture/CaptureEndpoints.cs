@@ -15,6 +15,7 @@ public static class CaptureEndpoints
         // {**path} also matches nothing, so /h/{token} works too.
         app.MapMethods("/h/{token}/{**path}", Methods, HandleAsync)
             .WithName("Capture")
+            .RequireRateLimiting(CaptureRateLimiting.ConcurrencyPolicy)
             .ExcludeFromDescription();
 
         return app;

@@ -19,6 +19,8 @@ public sealed class ApiFactory(string connectionString, IReadOnlyDictionary<stri
         builder.UseSetting("ConnectionStrings:Postgres", connectionString);
         builder.UseSetting("Capture:PermitsPerTokenPerMinute", "100000");
         builder.UseSetting("Capture:PermitsPerIpPerMinute", "100000");
+        builder.UseSetting("Capture:MaxConcurrentCaptures", "1000");
+        builder.UseSetting("Capture:CaptureQueueLimit", "1000");
         builder.UseSetting("TestSignIn:Enabled", "true");
 
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
