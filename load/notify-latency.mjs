@@ -15,7 +15,11 @@ import { writeFileSync } from 'node:fs'
 const baseUrl = (process.env.BASE_URL ?? '').replace(/\/$/, '')
 const endpointId = process.env.ENDPOINT_ID
 const token = process.env.TOKEN
-const authCookie = process.env.AUTH_COOKIE
+// Tolerate a pasted "__Host-wi-auth=..." or surrounding quotes.
+const authCookie = (process.env.AUTH_COOKIE ?? '')
+  .trim()
+  .replace(/^["']|["']$/g, '')
+  .replace(/^__Host-wi-auth=/, '')
 const samples = Number(process.env.SAMPLES ?? 60)
 const intervalMs = Number(process.env.INTERVAL_MS ?? 1000)
 const label = process.env.LABEL ?? 'notify-latency'
@@ -24,6 +28,21 @@ const cookieName = process.env.AUTH_COOKIE_NAME ?? '__Host-wi-auth'
 for (const [name, value] of Object.entries({ BASE_URL: baseUrl, ENDPOINT_ID: endpointId, TOKEN: token, AUTH_COOKIE: authCookie })) {
   if (!value) throw new Error(`Set ${name}.`)
 }
+
+for (const [name, value] of Object.entries({ ENDPOINT_ID: endpointId, TOKEN: token, AUTH_COOKIE: authCookie })) {
+  if (value.includes('<')) throw new Error(`${name} still contains a placeholder. Replace it with the real value.`)
+}
+
+// Check the session before starting SignalR, which would only say "401".
+const me = await fetch(`${baseUrl}/api/me`, { headers: { Cookie: `${cookieName}=${authCookie}` } })
+if (me.status !== 200) {
+  throw new Error(
+    `The server did not accept AUTH_COOKIE (status ${me.status}). Copy the whole Value of ${cookieName} ` +
+      `(it starts with CfDJ8 and is several hundred characters long) from the browser's dev tools, ` +
+      `while signed in on ${baseUrl}. You have ${authCookie.length} characters now.`,
+  )
+}
+console.log(`Signed in as ${(await me.json()).login}.`)
 
 const sentAt = new Map()
 const latencies = []
