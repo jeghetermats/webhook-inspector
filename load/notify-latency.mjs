@@ -5,18 +5,22 @@
 // into an environment variable in your own terminal. Never paste it into chat or commit it.
 //
 //   $env:BASE_URL = 'https://...'; $env:ENDPOINT_ID = '...'; $env:TOKEN = '...'
-//   $env:AUTH_COOKIE = '<value of __Host-wi-auth>'
+//   $env:AUTH_COOKIE = '<value of __Host-wi-auth>'   (or put the value in load/.auth-cookie)
 //   npm run notify-latency
 //
 // SAMPLES (default 60) requests are sent INTERVAL_MS (default 1000) apart.
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr'
-import { writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
 const baseUrl = (process.env.BASE_URL ?? '').replace(/\/$/, '')
 const endpointId = process.env.ENDPOINT_ID
 const token = process.env.TOKEN
+// AUTH_COOKIE, or the file load/.auth-cookie (git-ignored), so the value never has to be
+// typed into a shared terminal or chat. Delete the file when you are done.
+const cookieFile = new URL('./.auth-cookie', import.meta.url)
+const rawCookie = process.env.AUTH_COOKIE || (existsSync(cookieFile) ? readFileSync(cookieFile, 'utf8') : '')
 // Tolerate a pasted "__Host-wi-auth=..." or surrounding quotes.
-const authCookie = (process.env.AUTH_COOKIE ?? '')
+const authCookie = rawCookie
   .trim()
   .replace(/^["']|["']$/g, '')
   .replace(/^__Host-wi-auth=/, '')
