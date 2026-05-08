@@ -1,0 +1,12 @@
+{
+  "label": "notify-stress-50",
+  "sent": 60,
+  "rejected": 5,
+  "notified": 55,
+  "missing": 0,
+  "sendToNotificationMs": {
+    "median": 583.6463000000076,
+    "p95": 1591.5997000000025,
+    "max": 1699.6873
+  }
+}

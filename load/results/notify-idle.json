@@ -1,0 +1,12 @@
+{
+  "label": "notify-idle",
+  "sent": 40,
+  "rejected": 0,
+  "notified": 40,
+  "missing": 0,
+  "sendToNotificationMs": {
+    "median": 36.7016999999978,
+    "p95": 39.53520000000026,
+    "max": 46.559400000000096
+  }
+}

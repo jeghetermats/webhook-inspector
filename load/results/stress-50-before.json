@@ -1,0 +1,18 @@
+{
+  "label": "stress-50",
+  "baseUrl": "https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io",
+  "endpoints": 8,
+  "rate": 50,
+  "duration": "1m",
+  "bodyBytes": 1024,
+  "requests": 2039,
+  "stored": 279,
+  "rateLimited": 0,
+  "failed": 1760,
+  "storedLatencyMs": {
+    "median": 8976.95666,
+    "p95": 32890.67870039998,
+    "p99": 36115.95436518,
+    "max": 37714.883609
+  }
+}

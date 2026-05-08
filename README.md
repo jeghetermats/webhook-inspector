@@ -173,6 +173,33 @@ npm run notify-latency
 
 The capture route allows 120 requests/min per endpoint and 300/min per source IP, so a test from one machine at the default limits measures realistic traffic, not capacity. For a stress test the limits can be raised temporarily with the GitHub `production` variables `CAPTURE_PERMITS_PER_TOKEN_PER_MINUTE` and `CAPTURE_PERMITS_PER_IP_PER_MINUTE` and an Infra run, and removed again afterwards.
 
-### Results
+### Results (2026-05-08)
 
-Pending: to be measured against the live service (phase 6).
+Setup: one Container App replica with 0.25 vCPU and 0.5 GiB, Postgres Flexible Server B1MS, both in Norway East. k6 ran in Docker on a PC in Norway with 1 KB JSON bodies. The rate limits were raised for the test and restored afterwards. Raw results are in [`load/results`](load/results). Latencies include the round trip from the PC to Azure.
+
+| Run | Load | Requests | Stored | Rejected | Failed | Median | p95 | p99 |
+|---|---|---|---|---|---|---|---|---|
+| realistic | 3/s for 3 min, 8 endpoints | 540 | 540 | 0 | 0 | 44 ms | 113 ms | 165 ms |
+| stress-10 | 10/s for 2 min, 8 endpoints | 1201 | 1201 | 0 | 0 | 44 ms | 50 ms | 111 ms |
+| stress-25 | 25/s for 2 min, 8 endpoints | 3001 | 3001 | 0 | 0 | 44 ms | 50 ms | 59 ms |
+| hot | 20/s for 30 s, **one** endpoint | 601 | 601 | 0 | 0 | 43 ms | 108 ms | 417 ms |
+| stress-50, before | 50/s for 1 min, 8 endpoints | 2039 | 279 | 0 | **1760** | 8977 ms | 32891 ms | 36116 ms |
+| stress-50, after | 50/s for 75 s, 8 endpoints | 3750 | 3044 | 706 (503) | **0** | 1517 ms | 2294 ms | 3655 ms |
+
+Time from sending a webhook to receiving its live notification over SignalR (`notify-latency.mjs`):
+
+| Condition | Notified | Median | p95 | Max |
+|---|---|---|---|---|
+| Idle | 40 of 40 | 37 ms | 40 ms | 47 ms |
+| During stress-50 (after) | 55 of 55 stored | 584 ms | 1592 ms | 1700 ms |
+
+**Is the per-endpoint lock with `COUNT` sufficient?** Yes. With 20 requests/s all waiting for the same endpoint row lock, every request was stored with a median of 43 ms; the quota tests show the count stays correct under contention. The lock is not the bottleneck at the throughput one replica can reach.
+
+**What broke at 50/s, and what changed after the first run.** The replica reached 99% CPU. Requests queued while each held a database connection, Npgsql opened connections up to its default pool size of 100, and the B1MS server (`max_connections` = 50, some reserved by Azure) refused or timed out. 1760 of 2039 requests failed after up to 37 seconds; the app log showed `Database.Connection` errors and `TimeoutException`s. Two changes:
+
+1. **Load shedding on the capture route**: at most 16 captures at once, a queue of 50, and `503` with `Retry-After: 2` beyond that. Webhook senders retry on 503. The API and the hub are not affected.
+2. **Npgsql pool capped at 20 connections**, safely below the server limit.
+
+**Effect.** At the same 50/s, 3044 of 3750 requests were stored and the other 706 were turned away with 503 within the queue time. There were no server errors (the app log is clean, and Application Insights shows only 200 and 503). CPU was still at 100%, so one 0.25 vCPU replica stores about **40 captures per second**. Live notifications kept arriving for every stored request, within 1.6 s at p95 under full load.
+
+**Limits of this test.** It ran from one machine against one replica, with raised rate limits. In normal operation the per-token (120/min) and per-IP (300/min) limits stop a single sender long before this point. More throughput needs more CPU per replica, or several replicas with a SignalR backplane ([ADR 0004](docs/decisions/0004-one-replica-per-revision.md)). A shorter queue would lower the latency of accepted requests under overload, at the cost of more 503s.

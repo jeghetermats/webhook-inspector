@@ -1,0 +1,18 @@
+{
+  "label": "hot",
+  "baseUrl": "https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io",
+  "endpoints": 1,
+  "rate": 20,
+  "duration": "30s",
+  "bodyBytes": 1024,
+  "requests": 601,
+  "stored": 601,
+  "rateLimited": 0,
+  "failed": 0,
+  "storedLatencyMs": {
+    "median": 43.248401,
+    "p95": 108.146466,
+    "p99": 416.876248,
+    "max": 643.175275
+  }
+}
