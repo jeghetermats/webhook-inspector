@@ -45,7 +45,9 @@ resource workbook 'Microsoft.Insights/workbooks@2023-06-01' = {
     displayName: 'Webhook Inspector operations'
     category: 'workbook'
     sourceId: appInsights.id
-    serializedData: string(loadJsonContent('workbook.json'))
+    // The cleanup tile reads the job's container logs from the workspace: the short-lived
+    // cleanup process does not reliably flush to Application Insights before it exits.
+    serializedData: replace(loadTextContent('workbook.json'), '__WORKSPACE_ID__', workspace.id)
   }
 }
 

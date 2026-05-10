@@ -21,13 +21,23 @@
             "label": "Time range",
             "type": 4,
             "isRequired": true,
-            "value": { "durationMs": 86400000 },
+            "value": {
+              "durationMs": 86400000
+            },
             "typeSettings": {
               "selectableValues": [
-                { "durationMs": 3600000 },
-                { "durationMs": 14400000 },
-                { "durationMs": 86400000 },
-                { "durationMs": 604800000 }
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 604800000
+                }
               ]
             }
           }
@@ -82,14 +92,17 @@
       "name": "cleanup-runs",
       "content": {
         "version": "KqlItem/1.0",
-        "title": "Retention cleanup runs (hourly at :17)",
-        "query": "traces\n| where message startswith 'Retention cleanup deleted'\n| extend deleted = toint(customDimensions.DeletedCount)\n| project timestamp, deleted\n| order by timestamp desc",
+        "title": "Retention cleanup runs (hourly at :17), from the job's container logs",
+        "query": "ContainerAppConsoleLogs_CL\n| where ContainerJobName_s == 'caj-webhook-inspector-cleanup'\n| where Log_s has 'Retention cleanup deleted'\n| extend deleted = toint(extract(@'deleted (\\d+) requests', 1, Log_s))\n| project TimeGenerated, deleted\n| order by TimeGenerated desc",
         "size": 1,
         "timeContextFromParameter": "TimeRange",
         "queryType": 0,
-        "resourceType": "microsoft.insights/components",
+        "resourceType": "microsoft.operationalinsights/workspaces",
         "visualization": "table",
-        "noDataMessage": "No cleanup runs in this period. The job runs every hour at :17."
+        "noDataMessage": "No cleanup runs in this period. The job runs every hour at :17.",
+        "crossComponentResources": [
+          "__WORKSPACE_ID__"
+        ]
       }
     },
     {
