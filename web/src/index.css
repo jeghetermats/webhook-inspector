@@ -267,6 +267,10 @@ a {
   font-size: var(--step--1);
 }
 
+.topbar-demo {
+  color: var(--ink);
+}
+
 .topbar-user {
   display: flex;
   gap: var(--space-2);

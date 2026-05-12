@@ -31,7 +31,10 @@ export function SignIn() {
         <a className="button button-primary" href={loginUrl}>
           Sign in with GitHub
         </a>
-        <p className="signin-note">Only your GitHub username and id are stored.</p>
+        <p className="signin-note">
+          Only your GitHub username and id are stored. Want to look around first? <a href="/demo">Try the demo</a> with
+          made-up data.
+        </p>
       </div>
     </main>
   )
