@@ -122,4 +122,14 @@ export const api = {
   bodyDownloadUrl: (id: string) => `/api/requests/${id}/body`,
 }
 
+export type Api = typeof api
+
+/**
+ * Swaps the implementation behind `api`, before the app renders. Used by the public demo,
+ * which runs the real UI against an in-memory API and never calls the server.
+ */
+export function replaceApi(implementation: Api): void {
+  Object.assign(api, implementation)
+}
+
 export { filterQuery as buildFilterQuery }

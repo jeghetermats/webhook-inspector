@@ -3,8 +3,11 @@ import { createContext, useContext } from 'react'
 
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting' | 'offline'
 
+/** The part of a SignalR connection the app uses, so the demo can provide its own. */
+export type LiveConnection = Pick<HubConnection, 'on' | 'off' | 'invoke' | 'state'>
+
 export interface LiveContextValue {
-  connection: HubConnection
+  connection: LiveConnection
   status: LiveStatus
   /** Increases every time the connection comes back after being down. */
   reconnects: number
