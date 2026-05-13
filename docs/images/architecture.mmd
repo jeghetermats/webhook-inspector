@@ -1,0 +1,32 @@
+flowchart LR
+  sender["Webhook sender<br/>(GitHub, Stripe, curl)"]
+  user["Browser<br/>React SPA"]
+  gh["GitHub OAuth"]
+
+  subgraph aca["Azure Container Apps environment"]
+    app["ca-webhook-inspector<br/>ASP.NET Core 10<br/>capture, API, SignalR hub, SPA"]
+    migrate["Migration job<br/>(EF bundle, per deploy)"]
+    cleanup["Cleanup job<br/>(hourly, 7 day retention)"]
+  end
+
+  db[("PostgreSQL 17<br/>Flexible Server")]
+  mon["Log Analytics +<br/>Application Insights"]
+
+  subgraph ci["GitHub Actions"]
+    build["CI: tests, e2e,<br/>image build"]
+    deploy["Deploy via OIDC<br/>managed identity"]
+  end
+  ghcr["GHCR image"]
+
+  sender -- "ANY /h/{token}/..." --> app
+  user -- "/api, cookie + XSRF" --> app
+  user <-. "WebSocket /hubs/requests" .-> app
+  user -- "sign in" --> gh
+  gh -- "callback" --> app
+  app --> db
+  migrate --> db
+  cleanup --> db
+  app -- "redacted traces, logs" --> mon
+  build --> ghcr --> deploy
+  deploy --> migrate
+  deploy --> app
