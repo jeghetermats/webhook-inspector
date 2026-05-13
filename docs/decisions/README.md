@@ -17,4 +17,4 @@ Short records of decisions that shaped the project. Copy `0000-template.md` to s
 | [0011](0011-github-oauth-app-for-sign-in.md) | GitHub OAuth app (not a GitHub App) for sign-in | accepted |
 | [0012](0012-managed-identity-for-deploy-login.md) | User-assigned managed identity for the deploy login | accepted |
 
-Numbers 0001–0010 follow the list in [PLAN.md section 15](../PLAN.md#15-decisions-to-document-adrs), so some are filled in later. Decisions not in that list start at 0011.
+Numbers 0001 to 0010 follow the list in [PLAN.md section 15](../PLAN.md#15-decisions-to-document-adrs). Decisions made later start at 0011.

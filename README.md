@@ -1,8 +1,62 @@
 # Webhook Inspector
 
-Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request sent to that URL is stored and shown live in the browser, where it can be filtered, inspected and exported as `curl`.
+Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request sent to that URL is stored and shows up live in the browser, where it can be filtered, inspected byte for byte and exported as `curl`. Useful when building against GitHub, Stripe or Slack webhooks and you want to see exactly what they send.
 
-> See [docs/PLAN.md](docs/PLAN.md) for the full plan and [docs/decisions](docs/decisions) for the architecture decisions.
+**[Try the demo](https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io/demo)** (made-up data, runs in your browser, no sign-in) or [sign in](https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io) to create real endpoints.
+
+![Requests arriving live in the inspector](docs/images/live.gif)
+
+| Light | Dark | Mobile |
+|---|---|---|
+| ![Inspector in light mode](docs/images/inspector-light.png) | ![Inspector in dark mode](docs/images/inspector-dark.png) | ![Request detail on a phone](docs/images/mobile.png) |
+
+## Highlights
+
+- **Correct under concurrency.** Quotas are enforced under a per-endpoint row lock, tested with parallel requests against a real Postgres ([ADR 0005](docs/decisions/0005-quota-under-endpoint-row-lock.md)).
+- **Live without losing anything.** SignalR only says "something arrived"; the database is the source of truth, and the UI catches up through keyset pagination after a disconnect ([ADR 0003](docs/decisions/0003-database-as-source-of-truth.md), [ADR 0010](docs/decisions/0010-live-view-contract.md)).
+- **Captured data never reaches telemetry.** A trace processor strips everything but an allowlist on the capture route, and a script checks the live logs for a planted secret ([live secret check](#live-secret-check)).
+- **Isolation between users.** Every query is scoped to the signed-in user, and another user's resources answer `404`, covered by tests for every route.
+- **Measured, not guessed.** A load test found the breaking point of one small replica, and load shedding turned 1760 failures into clean `503` responses ([results](#load-test)).
+- **Cheap to run.** Scale to zero, a burstable database, an ingestion cap on logs and a budget alert.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  sender["Webhook sender<br/>(GitHub, Stripe, curl)"]
+  user["Browser<br/>React SPA"]
+  gh["GitHub OAuth"]
+
+  subgraph aca["Azure Container Apps environment"]
+    app["ca-webhook-inspector<br/>ASP.NET Core 10<br/>capture, API, SignalR hub, SPA"]
+    migrate["Migration job<br/>(EF bundle, per deploy)"]
+    cleanup["Cleanup job<br/>(hourly, 7 day retention)"]
+  end
+
+  db[("PostgreSQL 17<br/>Flexible Server")]
+  mon["Log Analytics +<br/>Application Insights"]
+
+  subgraph ci["GitHub Actions"]
+    build["CI: tests, e2e,<br/>image build"]
+    deploy["Deploy via OIDC<br/>managed identity"]
+  end
+  ghcr["GHCR image"]
+
+  sender -- "ANY /h/{token}/..." --> app
+  user -- "/api, cookie + XSRF" --> app
+  user <-. "WebSocket /hubs/requests" .-> app
+  user -- "sign in" --> gh
+  gh -- "callback" --> app
+  app --> db
+  migrate --> db
+  cleanup --> db
+  app -- "redacted traces, logs" --> mon
+  build --> ghcr --> deploy
+  deploy --> migrate
+  deploy --> app
+```
+
+One ASP.NET Core app serves the capture route, the JSON API, the SignalR hub and the built React app from the same origin, so the session cookie never has to cross origins. A capture request goes through rate limiting and load shedding, has its body read with a size limit before any database work, and is stored in one short transaction that locks the endpoint row and checks the quota. After the commit the owner's browser gets a small notification and fetches the details itself. Migrations and retention cleanup run as separate Container Apps jobs, so the app never changes the schema or deletes data on its own. The design and its trade-offs are in [docs/PLAN.md](docs/PLAN.md) and the [decision records](docs/decisions).
 
 ## Tech stack
 
@@ -49,6 +103,8 @@ npm run dev
 
 Browsers treat `http://localhost` as a secure context, so the `Secure` cookies work locally without HTTPS.
 
+The demo at <http://localhost:5173/demo> needs neither the API nor a database.
+
 Send a request to an endpoint's capture URL:
 
 ```bash
@@ -89,7 +145,7 @@ All `/api` routes need a signed-in user. Every non-GET request under `/api` and 
 
 ```bash
 dotnet test          # backend integration tests; Docker must be running (Testcontainers)
-cd web && npm test   # frontend unit tests (body decoding, curl export, API client)
+cd web && npm test   # frontend unit tests (body decoding, curl export, API client, live updates, demo)
 cd web && npm run e2e  # Playwright end-to-end tests against the real app
 ```
 
@@ -111,7 +167,7 @@ Everything runs in one resource group, `rg-webhook-inspector` (Norway East), def
 
 ### Pipelines
 
-- **CI** (`ci.yml`): every push and pull request. Backend tests with Testcontainers, frontend lint/typecheck/tests/build, Bicep build and Docker build.
+- **CI** (`ci.yml`): every push and pull request. Backend tests with Testcontainers, frontend lint/typecheck/tests/build, Playwright end-to-end tests against the real app and Postgres, Bicep build and Docker build.
 - **Deploy** (`deploy.yml`): after CI succeeds on `main`. Pushes the image to GHCR, runs the migrate job with the new image, then updates the app ([ADR 0008](docs/decisions/0008-migrations-as-a-separate-job.md)).
 - **Infra** (`infra.yml`): manual. Deploys the Bicep and keeps the app on its current image.
 
