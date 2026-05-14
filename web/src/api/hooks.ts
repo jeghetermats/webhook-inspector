@@ -90,13 +90,17 @@ export function useDeleteRequest(endpointId: string) {
   })
 }
 
+/**
+ * Signs out, then loads the start page fresh. A full page load is the simplest way to drop
+ * everything tied to the old session: cached queries, the live connection and the XSRF token.
+ * It also runs when the request fails (for example an already expired session), so the
+ * button never looks like it did nothing; if the session is still valid the user stays signed in.
+ */
 export function useSignOut() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: api.logout,
-    onSuccess: () => {
-      queryClient.clear()
-      queryClient.setQueryData(keys.me, null)
+    onSettled: () => {
+      window.location.assign('/')
     },
   })
 }
