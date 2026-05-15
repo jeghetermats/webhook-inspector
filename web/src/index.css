@@ -243,12 +243,15 @@ a {
 .shell {
   display: grid;
   grid-template-rows: auto 1fr;
+  /* minmax(0, 1fr): no single long line or button row can make the page wider than the screen. */
+  grid-template-columns: minmax(0, 1fr);
   block-size: 100dvh;
 }
 
 .topbar {
   display: flex;
-  gap: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
   align-items: center;
   padding: var(--space-2) var(--space-4);
   border-block-end: 1px solid var(--rule);
@@ -273,7 +276,9 @@ a {
 
 .topbar-user {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
+  margin-inline-start: auto;
   align-items: center;
   font-size: var(--step--1);
 }
@@ -286,6 +291,7 @@ a {
 
 .pane {
   min-block-size: 0;
+  min-inline-size: 0;
   overflow-y: auto;
   padding: var(--space-4);
 }
@@ -781,6 +787,11 @@ a {
 @media (max-width: 700px) {
   .topbar-note {
     display: none;
+  }
+
+  .topbar .button-primary {
+    padding: 0.4rem 0.8rem;
+    font-size: var(--step--1);
   }
 
   .workspace {
