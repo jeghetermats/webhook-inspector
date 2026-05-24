@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace WebhookInspector.Api.Data;
 
@@ -12,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<WebhookEndpoint> Endpoints => Set<WebhookEndpoint>();
 
     public DbSet<CapturedRequest> CapturedRequests => Set<CapturedRequest>();
+
+    public DbSet<ReplayAttempt> ReplayAttempts => Set<ReplayAttempt>();
 
     /// <summary>
     /// ASP.NET Core Data Protection keys, so auth and antiforgery cookies stay valid across
@@ -25,6 +28,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     /// </summary>
     public static byte[] BytesPrefix(byte[] bytes, int start, int count) =>
         throw new NotSupportedException("Only for use in database queries.");
+
+    private static readonly ValueConverter<List<HeaderEntry>, string> HeaderListConverter = new(
+        headers => JsonSerializer.Serialize(headers, JsonSerializerOptions.Web),
+        json => JsonSerializer.Deserialize<List<HeaderEntry>>(json, JsonSerializerOptions.Web) ?? new List<HeaderEntry>());
+
+    private static readonly ValueComparer<List<HeaderEntry>> HeaderListComparer = new(
+        (a, b) => a!.SequenceEqual(b!),
+        list => list.Aggregate(0, (hash, h) => HashCode.Combine(hash, h.GetHashCode())),
+        list => list.ToList());
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -68,13 +80,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             request.Property(r => r.Headers)
                 .HasColumnType("jsonb")
-                .HasConversion(
-                    headers => JsonSerializer.Serialize(headers, JsonSerializerOptions.Web),
-                    json => JsonSerializer.Deserialize<List<HeaderEntry>>(json, JsonSerializerOptions.Web) ?? new List<HeaderEntry>(),
-                    new ValueComparer<List<HeaderEntry>>(
-                        (a, b) => a!.SequenceEqual(b!),
-                        list => list.Aggregate(0, (hash, h) => HashCode.Combine(hash, h.GetHashCode())),
-                        list => list.ToList()));
+                .HasConversion(HeaderListConverter, HeaderListComparer);
+        });
+
+        modelBuilder.Entity<ReplayAttempt>(attempt =>
+        {
+            attempt.ToTable("ReplayAttempt");
+
+            // Deleted with the captured request, so retention cleanup covers replays too.
+            attempt.HasOne(a => a.CapturedRequest)
+                .WithMany()
+                .HasForeignKey(a => a.CapturedRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            attempt.HasIndex(a => new { a.CapturedRequestId, a.StartedAt, a.Id })
+                .IsDescending(false, true, true);
+
+            attempt.Property(a => a.ResponseHeaders)
+                .HasColumnType("jsonb")
+                .HasConversion(HeaderListConverter, HeaderListComparer);
         });
     }
 }

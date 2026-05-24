@@ -50,7 +50,7 @@ public sealed class TargetServer : IAsyncDisposable
             await next();
         });
 
-        app.Map("/echo", async (HttpContext context) =>
+        RequestDelegate echo = async context =>
         {
             using var body = new MemoryStream();
             await context.Request.Body.CopyToAsync(body);
@@ -59,7 +59,9 @@ public sealed class TargetServer : IAsyncDisposable
                 context.Request.Method,
                 context.Request.Headers.SelectMany(h => h.Value.Select(v => new[] { h.Key, v ?? string.Empty })).ToList(),
                 Convert.ToBase64String(body.ToArray())));
-        });
+        };
+        app.Map("/echo", echo);
+        app.Map("/echo/{**rest}", echo);
         app.Map("/redirect", () => Results.Redirect("/second"));
         app.Map("/second", () => Results.Text("followed"));
         app.Map("/big", () => Results.Bytes(Enumerable.Repeat((byte)'a', 100 * 1024).ToArray(), "text/plain"));

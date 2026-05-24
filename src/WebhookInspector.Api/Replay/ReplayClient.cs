@@ -83,7 +83,9 @@ public sealed class ReplayClient : IDisposable
             MaxResponseHeadersLength = 32, // KB
             MaxConnectionsPerServer = 4,
             PooledConnectionLifetime = TimeSpan.FromMinutes(1),
-            // No traceparent header: the target learns nothing about this service's traces.
+            // No traceparent header, so the target learns nothing about this service's traces.
+            // Without a propagator .NET also skips its client span for these calls, which is
+            // the first of two layers keeping the target URL out of telemetry (see SendAsync).
             ActivityHeadersPropagator = null,
             ConnectCallback = ConnectAsync,
         };
@@ -136,7 +138,8 @@ public sealed class ReplayClient : IDisposable
         timeout.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
 
         // The replay target is user-chosen and may carry secrets in its URL, so the outgoing
-        // call is kept out of telemetry entirely.
+        // call is kept out of telemetry entirely. This is the second layer, independent of the
+        // handler setting above. ReplayApiTests fails if both are removed.
         using var suppressTelemetry = SuppressInstrumentationScope.Begin();
         try
         {

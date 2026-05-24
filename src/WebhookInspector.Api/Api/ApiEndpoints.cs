@@ -19,6 +19,7 @@ public static class ApiEndpoints
 
         api.MapEndpointsApi();
         api.MapRequestsApi();
+        api.MapReplayApi();
 
         return app;
     }

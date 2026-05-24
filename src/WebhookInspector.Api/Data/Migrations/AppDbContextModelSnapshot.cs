@@ -93,6 +93,50 @@ namespace WebhookInspector.Api.Data.Migrations
                     b.ToTable("CapturedRequest", (string)null);
                 });
 
+            modelBuilder.Entity("WebhookInspector.Api.Data.ReplayAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CapturedRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text");
+
+                    b.Property<byte[]>("ResponseBody")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ResponseHeaders")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("ResponseTruncated")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TargetUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CapturedRequestId", "StartedAt", "Id")
+                        .IsDescending(false, true, true);
+
+                    b.ToTable("ReplayAttempt", (string)null);
+                });
+
             modelBuilder.Entity("WebhookInspector.Api.Data.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -156,6 +200,17 @@ namespace WebhookInspector.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Endpoint");
+                });
+
+            modelBuilder.Entity("WebhookInspector.Api.Data.ReplayAttempt", b =>
+                {
+                    b.HasOne("WebhookInspector.Api.Data.CapturedRequest", "CapturedRequest")
+                        .WithMany()
+                        .HasForeignKey("CapturedRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CapturedRequest");
                 });
 
             modelBuilder.Entity("WebhookInspector.Api.Data.WebhookEndpoint", b =>

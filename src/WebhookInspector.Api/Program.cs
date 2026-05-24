@@ -6,6 +6,7 @@ using WebhookInspector.Api.Auth;
 using WebhookInspector.Api.Capture;
 using WebhookInspector.Api.Data;
 using WebhookInspector.Api.Live;
+using WebhookInspector.Api.Replay;
 using WebhookInspector.Api.Retention;
 using WebhookInspector.Api.Security;
 using WebhookInspector.Api.Spa;
@@ -39,6 +40,7 @@ builder.Services.AddScoped<RetentionCleanup>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<RequestNotifier>();
 builder.Services.AddCaptureRateLimiting();
+builder.Services.AddReplay(builder.Configuration);
 
 builder.Services.AddAppAuthentication(builder.Configuration);
 builder.Services.AddAppAntiforgery(builder.Environment);
