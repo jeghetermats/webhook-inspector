@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from './client'
-import type { RequestFilters } from './types'
+import type { ReplayAttempt, RequestFilters } from './types'
 
 export const keys = {
   me: ['me'] as const,
@@ -8,6 +8,7 @@ export const keys = {
   requests: (endpointId: string) => ['requests', endpointId] as const,
   requestList: (endpointId: string, filters: RequestFilters) => ['requests', endpointId, 'list', filters] as const,
   request: (id: string) => ['request', id] as const,
+  replays: (requestId: string) => ['replays', requestId] as const,
 }
 
 export function useMe() {
@@ -86,6 +87,23 @@ export function useDeleteRequest(endpointId: string) {
         queryClient.invalidateQueries({ queryKey: keys.requests(endpointId) }),
         queryClient.invalidateQueries({ queryKey: keys.endpoints }),
       ])
+    },
+  })
+}
+
+export function useReplays(requestId: string) {
+  return useQuery({ queryKey: keys.replays(requestId), queryFn: () => api.replays(requestId) })
+}
+
+export function useReplay(requestId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (targetUrl: string) => api.replay(requestId, targetUrl),
+    onSuccess: (attempt) => {
+      // Show the new attempt at once; the refetch brings the list in line with the server,
+      // which keeps only the newest attempts.
+      queryClient.setQueryData<ReplayAttempt[]>(keys.replays(requestId), (list) => [attempt, ...(list ?? [])])
+      return queryClient.invalidateQueries({ queryKey: keys.replays(requestId) })
     },
   })
 }

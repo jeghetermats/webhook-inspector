@@ -68,6 +68,25 @@ describe('demo API', () => {
     await expect(api.requestDetail('missing')).rejects.toBeInstanceOf(ApiError)
   })
 
+  it('simulates replay without sending anything, and blocks private targets like the server', async () => {
+    const { api } = createDemoApi(now, 'demo.example')
+    const [github] = await api.endpoints()
+    const requestId = (await api.requests(github.id, {})).items[0].id
+
+    const ok = await api.replay(requestId, 'https://example.com/hooks')
+    const local = await api.replay(requestId, 'http://127.0.0.1/admin')
+    const metadata = await api.replay(requestId, 'http://169.254.169.254/latest/meta-data/')
+    const port = await api.replay(requestId, 'https://example.com:8443/')
+
+    expect(ok.statusCode).toBe(200)
+    expect(atob(ok.responseBodyBase64)).toContain('nothing leaves your browser')
+    expect(local.error).toMatch(/^Blocked:/)
+    expect(metadata.error).toMatch(/^Blocked:/)
+    expect(port.error).toBe('Blocked: Only ports 80 and 443 are allowed.')
+    await expect(api.replay(requestId, 'ftp://example.com/')).rejects.toMatchObject({ status: 400 })
+    expect((await api.replays(requestId)).map((a) => a.id)).toEqual([port.id, metadata.id, local.id, ok.id])
+  })
+
   it('uses only documentation IP addresses and no real-looking secrets', async () => {
     const { api } = createDemoApi(now, 'demo.example')
     const [github] = await api.endpoints()

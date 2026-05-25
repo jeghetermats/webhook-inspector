@@ -83,3 +83,10 @@ export function hexRows(bytes: Uint8Array, maxBytes = 64 * 1024): HexRow[] {
   }
   return rows
 }
+
+export type BodyView = 'pretty' | 'text' | 'hex'
+
+/** The most readable view for a body: formatted JSON, text, or hex for binary data. */
+export function initialView(body: DecodedBody): BodyView {
+  return body.kind === 'json' ? 'pretty' : body.kind === 'binary' ? 'hex' : 'text'
+}

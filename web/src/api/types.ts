@@ -62,6 +62,20 @@ export interface RequestDetail {
   sourceIp: string | null
 }
 
+/** One replay of a captured request (ReplayAttemptDto). Either a response or an error. */
+export interface ReplayAttempt {
+  id: string
+  requestId: string
+  targetUrl: string
+  startedAt: string
+  durationMs: number
+  statusCode: number | null
+  responseHeaders: Header[]
+  responseBodyBase64: string
+  responseTruncated: boolean
+  error: string | null
+}
+
 export interface RequestFilters {
   method?: string
   pathPrefix?: string
@@ -75,4 +89,5 @@ export const LIMITS = {
   maxRequestsPerEndpoint: 1000,
   maxBodyBytesPerEndpoint: 50 * 1024 * 1024,
   maxNameLength: 100,
+  replayResponseBytes: 64 * 1024,
 } as const

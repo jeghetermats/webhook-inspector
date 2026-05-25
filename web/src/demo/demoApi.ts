@@ -1,5 +1,5 @@
 import { type Api, ApiError } from '../api/client'
-import { type Endpoint, LIMITS, type RequestDetail, type RequestFilters, type RequestPage, type RequestReceivedEvent, type RequestSummary } from '../api/types'
+import { type Endpoint, LIMITS, type ReplayAttempt, type RequestDetail, type RequestFilters, type RequestPage, type RequestReceivedEvent, type RequestSummary } from '../api/types'
 import { base64ToBytes } from '../lib/body'
 import { matchesFilters } from '../lib/live'
 import { type DemoEndpoint, TEMPLATES, buildRequest, initialEndpoints, initialRequests } from './data'
@@ -57,6 +57,7 @@ export function createDemoApi(now = new Date(), host = window.location.host) {
   const requests = initialRequests(endpoints, now, host)
   const listeners = new Set<Listener>()
   const downloads = new Map<string, string>()
+  const replays = new Map<string, ReplayAttempt[]>()
   let simulated = 0
 
   const delay = <T>(value: T) => new Promise<T>((resolve) => setTimeout(() => resolve(value), 60))
@@ -163,6 +164,17 @@ export function createDemoApi(now = new Date(), host = window.location.host) {
       }
       return downloads.get(id)!
     },
+
+    replays: async (requestId: string) => {
+      findRequest(requestId)
+      return delay(replays.get(requestId) ?? [])
+    },
+    replay: async (requestId: string, targetUrl: string) => {
+      const request = findRequest(requestId)
+      const attempt = simulateReplay(request, targetUrl)
+      replays.set(requestId, [attempt, ...(replays.get(requestId) ?? [])].slice(0, 20))
+      return delay(attempt)
+    },
   }
 
   return {
@@ -199,3 +211,49 @@ export function createDemoApi(now = new Date(), host = window.location.host) {
 }
 
 export type DemoBackend = ReturnType<typeof createDemoApi>
+
+/**
+ * A rough imitation of the server's rules, so the demo shows what a blocked target looks like.
+ * The real check runs on the server against the addresses a name resolves to (ADR 0013).
+ */
+const PRIVATE_HOST =
+  /^(localhost|.*\.localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|0\.\d+\.\d+\.\d+|\[(::1?|f[cd][0-9a-f:]*|fe80:[0-9a-f:]*|::ffff:.*)\])$/i
+
+/** No request leaves the browser: a public target gets a made-up response that says so. */
+function simulateReplay(request: RequestDetail, targetUrl: string): ReplayAttempt {
+  let url: URL
+  try {
+    url = new URL(targetUrl)
+  } catch {
+    throw new ApiError(400, 'Enter an absolute http:// or https:// URL.')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new ApiError(400, 'Enter an absolute http:// or https:// URL.')
+  }
+
+  const port = url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80
+  const error =
+    port !== 80 && port !== 443
+      ? 'Blocked: Only ports 80 and 443 are allowed.'
+      : PRIVATE_HOST.test(url.hostname)
+        ? 'Blocked: The target is a private or reserved address.'
+        : null
+  const body = JSON.stringify(
+    { demo: true, message: 'Simulated response. In the demo nothing leaves your browser.', received: { method: request.method, bytes: request.bodySize } },
+    null,
+    2,
+  )
+
+  return {
+    id: crypto.randomUUID(),
+    requestId: request.id,
+    targetUrl: url.href,
+    startedAt: new Date().toISOString(),
+    durationMs: error ? 0 : 38,
+    statusCode: error ? null : 200,
+    responseHeaders: error ? [] : [{ name: 'Content-Type', value: 'application/json; charset=utf-8' }],
+    responseBodyBase64: error ? '' : btoa(body),
+    responseTruncated: false,
+    error,
+  }
+}

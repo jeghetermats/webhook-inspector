@@ -1,4 +1,4 @@
-import type { Endpoint, Me, RequestDetail, RequestFilters, RequestPage } from './types'
+import type { Endpoint, Me, ReplayAttempt, RequestDetail, RequestFilters, RequestPage } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -120,6 +120,10 @@ export const api = {
   requestDetail: (id: string) => request<RequestDetail>('GET', `/api/requests/${id}`),
   deleteRequest: (id: string) => request<void>('DELETE', `/api/requests/${id}`),
   bodyDownloadUrl: (id: string) => `/api/requests/${id}/body`,
+
+  replays: (requestId: string) => request<ReplayAttempt[]>('GET', `/api/requests/${requestId}/replays`),
+  replay: (requestId: string, targetUrl: string) =>
+    request<ReplayAttempt>('POST', `/api/requests/${requestId}/replays`, { targetUrl }),
 }
 
 export type Api = typeof api
