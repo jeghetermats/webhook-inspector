@@ -1,6 +1,6 @@
 # Webhook Inspector
 
-Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request sent to that URL is stored and shows up live in the browser, where it can be filtered, inspected byte for byte and exported as `curl`. Useful when building against GitHub, Stripe or Slack webhooks and you want to see exactly what they send.
+Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request sent to that URL is stored and shows up live in the browser, where it can be filtered, inspected byte for byte, exported as `curl` or replayed to your own server. Useful when building against GitHub, Stripe or Slack webhooks and you want to see exactly what they send.
 
 **[Try the demo](https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io/demo)** (made-up data, runs in your browser, no sign-in) or [sign in](https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io) to create real endpoints.
 
@@ -15,6 +15,7 @@ Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request
 - **Correct under concurrency.** Quotas are enforced under a per-endpoint row lock, tested with parallel requests against a real Postgres ([ADR 0005](docs/decisions/0005-quota-under-endpoint-row-lock.md)).
 - **Live without losing anything.** SignalR only says "something arrived"; the database is the source of truth, and the UI catches up through keyset pagination after a disconnect ([ADR 0003](docs/decisions/0003-database-as-source-of-truth.md), [ADR 0010](docs/decisions/0010-live-view-contract.md)).
 - **Captured data never reaches telemetry.** A trace processor strips everything but an allowlist on the capture route, and a script checks the live logs for a planted secret ([live secret check](#live-secret-check)).
+- **Replay without SSRF.** A stored request can be sent again to any public URL, but never to `localhost`, private networks or the cloud metadata service, whatever the notation, DNS answer or redirect. The address is checked at connect time, so DNS rebinding has no gap to use ([ADR 0013](docs/decisions/0013-replay-with-ssrf-protection.md)).
 - **Isolation between users.** Every query is scoped to the signed-in user, and another user's resources answer `404`, covered by tests for every route.
 - **Measured, not guessed.** A load test found the breaking point of one small replica, and load shedding turned 1760 failures into clean `503` responses ([results](#load-test)).
 - **Cheap to run.** Scale to zero, a burstable database, an ingestion cap on logs and a budget alert.
@@ -51,6 +52,7 @@ flowchart LR
   migrate --> db
   cleanup --> db
   app -- "redacted traces, logs" --> mon
+  app -. "replay: public IPs, ports 80/443" .-> replayTarget["Your server<br/>(replay target)"]
   build --> ghcr --> deploy
   deploy --> migrate
   deploy --> app
@@ -129,6 +131,7 @@ All `/api` routes need a signed-in user. Every non-GET request under `/api` and 
 | GET | `/api/endpoints/{id}/requests?cursor=&limit=&method=&pathPrefix=&from=&to=` | Newest first, keyset pagination |
 | GET, DELETE | `/api/requests/{id}` | Full detail / delete one |
 | GET | `/api/requests/{id}/body` | Raw body as an attachment |
+| GET, POST | `/api/requests/{id}/replays` | Earlier attempts, newest first / replay to `{ "targetUrl": "https://…" }` |
 | GET | `/health/live`, `/health/ready` | Liveness / database readiness |
 | WS | `/hubs/requests` | SignalR hub (sign-in required): `Subscribe(endpointId)`, then `RequestReceived` events with id, method, path, time, size and cursor (no body, headers or query) |
 
@@ -140,6 +143,7 @@ All `/api` routes need a signed-in user. Every non-GET request under `/api` and 
 | Headers | 64 headers, 32 KB in total |
 | Rate limit | 120 requests/min per capture token, 300/min per source IP (`429`) |
 | Quota per endpoint | 1,000 requests and 50 MB of body bytes (`429`) |
+| Replay | Public addresses on ports 80 and 443 only, 5 s timeout, 64 KB of the response kept, 10 per user per minute (`429`), 8 at once (`503`), last 20 attempts per request |
 
 ## Tests
 
@@ -210,6 +214,7 @@ Create an endpoint called "leak check" in the live UI and pass the last part of 
 - The app connects as the Postgres administrator. A separate least-privilege role is a v2 improvement.
 - Data Protection keys are stored unencrypted in the database (see [ADR 0002](docs/decisions/0002-cookie-authentication.md)).
 - The first request after a quiet period has a cold start of a few seconds ([ADR 0007](docs/decisions/0007-scale-to-zero.md)).
+- Replay cannot reach `localhost` or ports other than 80 and 443, by design. To replay to your own machine, expose it through a tunnel such as ngrok or Cloudflare Tunnel.
 
 ## Load test
 

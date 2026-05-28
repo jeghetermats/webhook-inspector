@@ -27,6 +27,7 @@ flowchart LR
   migrate --> db
   cleanup --> db
   app -- "redacted traces, logs" --> mon
+  app -. "replay: public IPs, ports 80/443" .-> replayTarget["Your server<br/>(replay target)"]
   build --> ghcr --> deploy
   deploy --> migrate
   deploy --> app
