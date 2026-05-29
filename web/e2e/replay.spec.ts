@@ -21,7 +21,11 @@ test('replaying to a private address is blocked and shown as a failed attempt', 
 
   // The attempt is stored: it is still there after a reload.
   await page.reload()
-  await expect(page.getByRole('list', { name: /Replay attempts/ }).getByText('http://127.0.0.1/admin')).toBeVisible()
+  const row = page.getByRole('list', { name: /Replay attempts/ }).locator('summary')
+  await expect(row.getByText('http://127.0.0.1/admin')).toBeVisible()
+  // Collapsed, with a visible cue; opening it shows the full target.
+  await row.click()
+  await expect(page.getByText('Sent to http://127.0.0.1/admin')).toBeVisible()
 })
 
 test('a malformed target is rejected before anything is sent', async ({ page }) => {

@@ -40,13 +40,20 @@ export function refreshXsrfToken(): Promise<void> {
   return tokenRequest
 }
 
+/** For responses without a readable problem body: say what happened and what to do next. */
+function fallbackMessage(status: number): string {
+  return status >= 500
+    ? `The server could not complete the request (status ${status}). Try again in a moment.`
+    : `The request was not accepted (status ${status}). Reload the page and try again.`
+}
+
 async function problemMessage(response: Response): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: string; title?: string; errors?: Record<string, string[]> }
     const firstError = body.errors ? Object.values(body.errors).flat()[0] : undefined
-    return firstError ?? body.detail ?? body.title ?? `Request failed with status ${response.status}.`
+    return firstError ?? body.detail ?? body.title ?? fallbackMessage(response.status)
   } catch {
-    return `Request failed with status ${response.status}.`
+    return fallbackMessage(response.status)
   }
 }
 

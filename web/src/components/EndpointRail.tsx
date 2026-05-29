@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { useEndpointMutations } from '../api/hooks'
 import { type Endpoint, LIMITS } from '../api/types'
@@ -8,13 +8,20 @@ export function EndpointRail({ endpoints, selectedId }: { endpoints: UseQueryRes
   const { create } = useEndpointMutations()
   const navigate = useNavigate()
   const [name, setName] = useState('')
+  const [nameError, setNameError] = useState<string | null>(null)
+  const input = useRef<HTMLInputElement>(null)
   const count = endpoints.data?.length ?? 0
   const full = count >= LIMITS.maxEndpoints
 
   function submit(event: FormEvent) {
     event.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      setNameError('Enter a name for the endpoint, for example GitHub push.')
+      input.current?.focus()
+      return
+    }
+    setNameError(null)
     create.mutate(trimmed, {
       onSuccess: (endpoint) => {
         setName('')
@@ -28,7 +35,11 @@ export function EndpointRail({ endpoints, selectedId }: { endpoints: UseQueryRes
       <h2 className="pane-title">Endpoints</h2>
 
       {endpoints.isPending ? <p className="muted">Loading…</p> : null}
-      {endpoints.isError ? <p className="error">Could not load your endpoints.</p> : null}
+      {endpoints.isError ? (
+        <p className="error" role="alert">
+          Could not load your endpoints. Check your connection and reload the page.
+        </p>
+      ) : null}
 
       <ul className="rail-list">
         {endpoints.data?.map((endpoint) => (
@@ -51,20 +62,35 @@ export function EndpointRail({ endpoints, selectedId }: { endpoints: UseQueryRes
         </label>
         <div className="field-row">
           <input
+            ref={input}
             id="new-endpoint"
             className="input"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value)
+              if (nameError) setNameError(null)
+            }}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? 'new-endpoint-error' : undefined}
             placeholder="e.g. GitHub push"
             maxLength={LIMITS.maxNameLength}
             disabled={full}
           />
-          <button type="submit" className="button" disabled={full || !name.trim() || create.isPending}>
+          <button type="submit" className="button" disabled={full || create.isPending}>
             Create
           </button>
         </div>
         {full ? <p className="muted small">You have {LIMITS.maxEndpoints} endpoints, the maximum. Delete one to create another.</p> : null}
-        {create.isError ? <p className="error small">{create.error.message}</p> : null}
+        {nameError ? (
+          <p id="new-endpoint-error" className="error small">
+            {nameError}
+          </p>
+        ) : null}
+        {create.isError ? (
+          <p className="error small" role="alert">
+            {create.error.message}
+          </p>
+        ) : null}
       </form>
     </nav>
   )

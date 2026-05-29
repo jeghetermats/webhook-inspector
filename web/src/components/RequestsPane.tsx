@@ -5,8 +5,9 @@ import { keys, useEndpointMutations, useRequestList } from '../api/hooks'
 import { type Endpoint, LIMITS, type RequestFilters } from '../api/types'
 import { useLiveRequests } from '../live/useLiveRequests'
 import type { LiveStatus } from '../live/context'
-import { formatBytes } from '../lib/format'
+import { countOf, formatBytes } from '../lib/format'
 import { METHODS, captureUrl, formatRelative } from '../lib/http'
+import { ConfirmButton } from './ConfirmButton'
 import { CopyButton } from './CopyButton'
 import { MethodTag } from './MethodTag'
 
@@ -60,8 +61,14 @@ export function RequestsPane({ endpoint, selectedRequestId }: { endpoint: Endpoi
       />
 
       <div className="list-toolbar">
-        <span className="muted small">
-          {list.isSuccess ? `${items.length}${list.hasNextPage ? '+' : ''} ${hasFilters ? 'matching ' : ''}requests` : ' '}
+        <span className="muted small numeric">
+          {!list.isSuccess
+            ? ' '
+            : list.hasNextPage
+              ? `${items.length}+ ${hasFilters ? 'matching ' : ''}requests`
+              : hasFilters
+                ? countOf(items.length, 'matching request', 'matching requests')
+                : countOf(items.length, 'request', 'requests')}
         </span>
         <LiveIndicator status={liveStatus} />
         <button
@@ -80,7 +87,11 @@ export function RequestsPane({ endpoint, selectedRequestId }: { endpoint: Endpoi
         </button>
       </div>
 
-      {list.isError ? <p className="error">Could not load requests: {list.error.message}</p> : null}
+      {list.isError ? (
+        <p className="error" role="alert">
+          Could not load requests. Check your connection, then select Refresh.
+        </p>
+      ) : null}
 
       {list.isSuccess && items.length === 0 ? (
         hasFilters ? (
@@ -137,6 +148,7 @@ function EndpointHeader({ endpoint }: { endpoint: Endpoint }) {
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(endpoint.name)
+  const [nameError, setNameError] = useState<string | null>(null)
   const url = captureUrl(window.location.origin, endpoint.captureToken)
   const requestShare = endpoint.requestCount / LIMITS.maxRequestsPerEndpoint
   const byteShare = endpoint.bodyBytes / LIMITS.maxBodyBytesPerEndpoint
@@ -145,6 +157,11 @@ function EndpointHeader({ endpoint }: { endpoint: Endpoint }) {
 
   function submitRename(event: FormEvent) {
     event.preventDefault()
+    if (!name.trim()) {
+      setNameError('Enter a name for the endpoint.')
+      return
+    }
+    setNameError(null)
     rename.mutate({ id: endpoint.id, name: name.trim() }, { onSuccess: () => setEditing(false) })
   }
 
@@ -159,16 +176,33 @@ function EndpointHeader({ endpoint }: { endpoint: Endpoint }) {
             id="rename"
             className="input"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value)
+              if (nameError) setNameError(null)
+            }}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={nameError ? 'rename-error' : undefined}
             maxLength={LIMITS.maxNameLength}
             autoFocus
           />
-          <button type="submit" className="button" disabled={!name.trim() || rename.isPending}>
+          <button type="submit" className="button" disabled={rename.isPending}>
             Save
           </button>
-          <button type="button" className="button button-quiet" onClick={() => setEditing(false)}>
+          <button
+            type="button"
+            className="button button-quiet"
+            onClick={() => {
+              setNameError(null)
+              setEditing(false)
+            }}
+          >
             Cancel
           </button>
+          {nameError ? (
+            <p id="rename-error" className="error small rename-error">
+              {nameError}
+            </p>
+          ) : null}
         </form>
       ) : (
         <div className="endpoint-title-row">
@@ -195,51 +229,51 @@ function EndpointHeader({ endpoint }: { endpoint: Endpoint }) {
         <div className="usage-bar" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(usage * 100)} aria-label="Storage used">
           <span className="usage-fill" style={{ inlineSize: `${usage * 100}%` }} data-level={usage >= 0.9 ? 'high' : 'normal'} />
         </div>
-        <span className="muted small">
+        <span className="muted small numeric">
           {endpoint.requestCount} of {LIMITS.maxRequestsPerEndpoint} requests, {formatBytes(endpoint.bodyBytes)} of{' '}
           {formatBytes(LIMITS.maxBodyBytesPerEndpoint)}
         </span>
       </div>
 
       <div className="endpoint-actions">
-        <button
-          type="button"
+        <ConfirmButton
           className="button button-quiet"
           disabled={rotate.isPending}
-          onClick={() => {
-            if (window.confirm('Get a new URL? The current URL stops working immediately. Stored requests are kept.')) {
-              rotate.mutate(endpoint.id)
-            }
-          }}
+          title={`Get a new URL for “${endpoint.name}”?`}
+          body={<p>The current URL stops working right away. Senders using it get 404 until you give them the new one. Stored requests are kept.</p>}
+          action="Get new URL"
+          onConfirm={() => rotate.mutate(endpoint.id)}
         >
           New URL
-        </button>
-        <button
-          type="button"
-          className="button button-quiet"
+        </ConfirmButton>
+        <ConfirmButton
+          className="button button-danger"
           disabled={clear.isPending || endpoint.requestCount === 0}
-          onClick={() => {
-            if (window.confirm(`Delete all ${endpoint.requestCount} requests for "${endpoint.name}"?`)) {
-              clear.mutate(endpoint.id, { onSuccess: () => navigate(`/endpoints/${endpoint.id}`) })
-            }
-          }}
+          title={`Delete all requests in “${endpoint.name}”?`}
+          body={<p>{countOf(endpoint.requestCount, 'request', 'requests')} will be deleted for good. The endpoint and its URL keep working.</p>}
+          action="Delete requests"
+          destructive
+          onConfirm={() => clear.mutate(endpoint.id, { onSuccess: () => navigate(`/endpoints/${endpoint.id}`) })}
         >
           Delete all requests
-        </button>
-        <button
-          type="button"
+        </ConfirmButton>
+        <ConfirmButton
           className="button button-danger"
           disabled={remove.isPending}
-          onClick={() => {
-            if (window.confirm(`Delete the endpoint "${endpoint.name}" and all its requests? The URL stops working.`)) {
-              remove.mutate(endpoint.id, { onSuccess: () => navigate('/') })
-            }
-          }}
+          title={`Delete “${endpoint.name}”?`}
+          body={<p>The endpoint, its URL and {countOf(endpoint.requestCount, 'stored request', 'stored requests')} will be deleted for good. Senders using the URL get 404.</p>}
+          action="Delete endpoint"
+          destructive
+          onConfirm={() => remove.mutate(endpoint.id, { onSuccess: () => navigate('/') })}
         >
           Delete endpoint
-        </button>
+        </ConfirmButton>
       </div>
-      {error ? <p className="error small">{error.message}</p> : null}
+      {error ? (
+        <p className="error small" role="alert">
+          {error.message}
+        </p>
+      ) : null}
     </header>
   )
 }

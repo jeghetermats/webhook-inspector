@@ -30,7 +30,8 @@ test('sign in, create an endpoint, send a request and inspect it', async ({ page
   await expect(wire).not.toContainText('wi-auth')
   await expect(wire).not.toContainText('XSRF-TOKEN')
 
-  await page.getByRole('radio', { name: 'Hex' }).click()
+  await page.getByRole('button', { name: 'Hex', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Hex', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(wire).toContainText('7b 22 72 65 66 22') // {"ref"
 
   const query = page.locator('.pairs')
@@ -45,8 +46,16 @@ test('sign in, create an endpoint, send a request and inspect it', async ({ page
   await page.reload()
   await expect(page.getByRole('region', { name: 'Raw request' })).toContainText('X-GitHub-Event: push')
 
-  page.once('dialog', (dialog) => dialog.accept())
+  // Deleting asks first, in a dialog that names the request; Cancel keeps it.
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  const confirm = page.getByRole('dialog', { name: 'Delete request “POST /push”?' })
+  await expect(confirm).toBeVisible()
+  await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(confirm).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeFocused() // focus returns to the trigger
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await confirm.getByRole('button', { name: 'Delete request' }).click()
   await expect(page.getByRole('link', { name: /POST\s*\/push/ })).toHaveCount(0)
   await expect(page.getByText('No requests yet')).toBeVisible()
 })

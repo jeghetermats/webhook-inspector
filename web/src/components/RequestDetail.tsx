@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import { useDeleteRequest, useRequestDetail } from '../api/hooks'
@@ -7,6 +7,7 @@ import { type BodyView, base64ToBytes, decodeBody, initialView } from '../lib/bo
 import { toCurl } from '../lib/curl'
 import { formatBytes } from '../lib/format'
 import { captureUrl, formatTime, queryPairs } from '../lib/http'
+import { ConfirmButton } from './ConfirmButton'
 import { CopyButton } from './CopyButton'
 import { BodySection } from './BodyView'
 import { MethodTag } from './MethodTag'
@@ -33,6 +34,7 @@ function RequestView({ request, endpoint, backTo }: { request: RequestDetail; en
   const body = useMemo(() => decodeBody(base64ToBytes(request.bodyBase64), request.contentType), [request])
   const [view, setView] = useState<BodyView>(initialView(body))
   const remove = useDeleteRequest(endpoint.id)
+  const heading = useRef<HTMLHeadingElement>(null)
   const navigate = useNavigate()
   const query = queryPairs(request.rawQuery)
   const target = `${request.path}${request.rawQuery ? `?${request.rawQuery}` : ''}`
@@ -40,6 +42,12 @@ function RequestView({ request, endpoint, backTo }: { request: RequestDetail; en
     url: `${captureUrl(window.location.origin, endpoint.captureToken)}${target === '/' ? '' : target}`,
     bodyText: body.kind === 'binary' ? null : body.text,
   })
+
+  // Opening a request moves focus here, so keyboard and screen-reader users land on what
+  // they opened instead of staying in the list (or on a list that is now hidden).
+  useEffect(() => {
+    heading.current?.focus({ preventScroll: true })
+  }, [])
 
   return (
     <article className="request">
@@ -49,18 +57,17 @@ function RequestView({ request, endpoint, backTo }: { request: RequestDetail; en
           <a className="button" href={api.bodyDownloadUrl(request.id)} download>
             Download body
           </a>
-          <button
-            type="button"
+          <ConfirmButton
             className="button button-danger"
             disabled={remove.isPending}
-            onClick={() => {
-              if (window.confirm('Delete this request?')) {
-                remove.mutate(request.id, { onSuccess: () => navigate(backTo) })
-              }
-            }}
+            title={`Delete request “${request.method} ${request.path}”?`}
+            body={<p>It will be deleted from “{endpoint.name}” for good, together with its replay attempts.</p>}
+            action="Delete request"
+            destructive
+            onConfirm={() => remove.mutate(request.id, { onSuccess: () => navigate(backTo) })}
           >
             Delete
-          </button>
+          </ConfirmButton>
         </div>
         <dl className="facts">
           <div>
@@ -88,9 +95,9 @@ function RequestView({ request, endpoint, backTo }: { request: RequestDetail; en
       {/* The request as it would look on the wire. All captured values are rendered as
           text nodes, never as HTML. */}
       <div className="wire" role="region" aria-label="Raw request">
-        <div className="wire-line wire-request">
+        <h2 className="wire-line wire-request" ref={heading} tabIndex={-1}>
           <MethodTag method={request.method} /> <span className="wire-target">{target}</span>
-        </div>
+        </h2>
         {request.headers.map((header, index) => (
           <div className="wire-line" key={`${header.name}-${index}`}>
             <span className="wire-name">{header.name}</span>: <span className="wire-value">{header.value}</span>

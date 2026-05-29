@@ -1,5 +1,12 @@
 const UNITS = ['B', 'KB', 'MB', 'GB'] as const
 
+const pluralRules = new Intl.PluralRules('en')
+
+/** "1 request", "2 requests". Uses the language's plural rules, not a hand-written "s". */
+export function countOf(count: number, one: string, other: string): string {
+  return `${count} ${pluralRules.select(count) === 'one' ? one : other}`
+}
+
 /** Formats a byte count with binary units, e.g. 1536 -> "1.5 KB". */
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) {

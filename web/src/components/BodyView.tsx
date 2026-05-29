@@ -18,13 +18,12 @@ export function BodySection({ body, view, onViewChange }: { body: DecodedBody; v
   return (
     <div className="body">
       {views.length > 1 ? (
-        <div className="body-views" role="radiogroup" aria-label="Show body as">
+        <div className="body-views" role="group" aria-label="Show body as">
           {views.map((v) => (
             <button
               key={v.id}
               type="button"
-              role="radio"
-              aria-checked={view === v.id}
+              aria-pressed={view === v.id}
               className={view === v.id ? 'body-view body-view-active' : 'body-view'}
               onClick={() => onViewChange(v.id)}
             >

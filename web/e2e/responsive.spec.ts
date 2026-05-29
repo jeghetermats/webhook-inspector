@@ -48,6 +48,9 @@ test('the signed-in app fits a narrow phone, including a long request', async ({
   await page.goto('/')
   const captureUrl = await createEndpoint(page, 'An endpoint with a rather long name for a phone')
   await expectNoHorizontalScroll(page, 'endpoint')
+  // Fields under 16px make iOS Safari zoom the whole page on focus.
+  const fieldSizes = await page.evaluate(() => [...document.querySelectorAll('.input')].map((e) => getComputedStyle(e).fontSize))
+  expect(new Set(fieldSizes)).toEqual(new Set(['16px']))
 
   const longValue = 'x'.repeat(400)
   await page.request.post(`${captureUrl}/a/${'segment/'.repeat(20)}?q=${longValue}`, {
@@ -60,7 +63,7 @@ test('the signed-in app fits a narrow phone, including a long request', async ({
   await expectNoHorizontalScroll(page, 'request with long values')
 
   for (const view of ['Text', 'Hex']) {
-    await page.getByRole('radio', { name: view, exact: true }).click()
+    await page.getByRole('button', { name: view, exact: true }).click()
     await expectNoHorizontalScroll(page, `${view} body view`)
   }
 })

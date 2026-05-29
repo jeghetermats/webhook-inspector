@@ -110,6 +110,9 @@ function AttemptView({ attempt, open }: { attempt: ReplayAttempt; open: boolean 
           <time dateTime={attempt.startedAt}>{formatTime(attempt.startedAt)}</time>, {attempt.durationMs} ms
         </span>
       </summary>
+      <p className="replay-sent">
+        Sent to <code className="replay-sent-url">{attempt.targetUrl}</code>
+      </p>
       {attempt.error !== null ? (
         <p className="replay-error">{attempt.error}</p>
       ) : (
