@@ -17,7 +17,7 @@ Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request
 - **Captured data never reaches telemetry.** A trace processor strips everything but an allowlist on the capture route, and a script checks the live logs for a planted secret ([live secret check](#live-secret-check)).
 - **Replay without SSRF.** A stored request can be sent again to any public URL, but never to `localhost`, private networks or the cloud metadata service, whatever the notation, DNS answer or redirect. The address is checked at connect time, so DNS rebinding has no gap to use ([ADR 0013](docs/decisions/0013-replay-with-ssrf-protection.md)).
 - **Isolation between users.** Every query is scoped to the signed-in user, and another user's resources answer `404`, covered by tests for every route.
-- **Measured, not guessed.** A load test found the breaking point of one small replica, and load shedding turned 1760 failures into clean `503` responses ([results](#load-test)).
+- **Measured, not guessed.** A load test found where one small replica breaks. Load shedding and a capped connection pool then replaced 37-second timeouts with fast `503` responses, and 81% of requests were still stored at that load ([results](#load-test)).
 - **Cheap to run.** Scale to zero, a burstable database, an ingestion cap on logs and a budget alert.
 
 ## Architecture
@@ -218,49 +218,10 @@ Create an endpoint called "leak check" in the live UI and pass the last part of 
 
 ## Load test
 
-[`load/capture.js`](load/capture.js) (k6) sends webhooks to the live capture route at a constant rate and reports stored, rate-limited and failed requests and the latency of stored captures. [`load/notify-latency.mjs`](load/notify-latency.mjs) measures the time from sending a webhook to receiving its live notification over SignalR, the same path the browser uses. Both write JSON to `load/results`.
+A k6 test against the live service, with one 0.25 vCPU replica and the smallest Postgres server:
 
-```powershell
-# Capture load (k6 in Docker, nothing to install)
-docker run --rm -i -v "${PWD}/load:/load" -e BASE_URL=https://<app URL> -e TOKENS=<token1>,<token2> `
-  -e RATE=3 -e DURATION=3m -e LABEL=realistic grafana/k6 run /load/capture.js
+- Up to 25 requests/s, every request was stored, with a median of 44 ms from a PC in Norway.
+- At 50 requests/s the first run fell over: database connections ran out and 1760 of 2039 requests failed after up to 37 seconds.
+- After adding load shedding and capping the connection pool, the same 50/s stored 3044 of 3750 requests (81%) and turned the other 706 away with a fast `503`, with no timeouts or exceptions. Live notifications kept arriving within 1.6 s at p95.
 
-# Notification latency, in a second terminal while k6 runs. AUTH_COOKIE is the value of the
-# __Host-wi-auth cookie from your browser's dev tools: set it in your own terminal only.
-cd load; npm install
-$env:BASE_URL='https://<app URL>'; $env:ENDPOINT_ID='<id>'; $env:TOKEN='<token>'; $env:AUTH_COOKIE='<cookie>'
-npm run notify-latency
-```
-
-The capture route allows 120 requests/min per endpoint and 300/min per source IP, so a test from one machine at the default limits measures realistic traffic, not capacity. For a stress test the limits can be raised temporarily with the GitHub `production` variables `CAPTURE_PERMITS_PER_TOKEN_PER_MINUTE` and `CAPTURE_PERMITS_PER_IP_PER_MINUTE` and an Infra run, and removed again afterwards.
-
-### Results (2026-05-08)
-
-Setup: one Container App replica with 0.25 vCPU and 0.5 GiB, Postgres Flexible Server B1MS, both in Norway East. k6 ran in Docker on a PC in Norway with 1 KB JSON bodies. The rate limits were raised for the test and restored afterwards. Raw results are in [`load/results`](load/results). Latencies include the round trip from the PC to Azure.
-
-| Run | Load | Requests | Stored | Rejected | Failed | Median | p95 | p99 |
-|---|---|---|---|---|---|---|---|---|
-| realistic | 3/s for 3 min, 8 endpoints | 540 | 540 | 0 | 0 | 44 ms | 113 ms | 165 ms |
-| stress-10 | 10/s for 2 min, 8 endpoints | 1201 | 1201 | 0 | 0 | 44 ms | 50 ms | 111 ms |
-| stress-25 | 25/s for 2 min, 8 endpoints | 3001 | 3001 | 0 | 0 | 44 ms | 50 ms | 59 ms |
-| hot | 20/s for 30 s, **one** endpoint | 601 | 601 | 0 | 0 | 43 ms | 108 ms | 417 ms |
-| stress-50, before | 50/s for 1 min, 8 endpoints | 2039 | 279 | 0 | **1760** | 8977 ms | 32891 ms | 36116 ms |
-| stress-50, after | 50/s for 75 s, 8 endpoints | 3750 | 3044 | 706 (503) | **0** | 1517 ms | 2294 ms | 3655 ms |
-
-Time from sending a webhook to receiving its live notification over SignalR (`notify-latency.mjs`):
-
-| Condition | Notified | Median | p95 | Max |
-|---|---|---|---|---|
-| Idle | 40 of 40 | 37 ms | 40 ms | 47 ms |
-| During stress-50 (after) | 55 of 55 stored | 584 ms | 1592 ms | 1700 ms |
-
-**Is the per-endpoint lock with `COUNT` sufficient?** Yes. With 20 requests/s all waiting for the same endpoint row lock, every request was stored with a median of 43 ms; the quota tests show the count stays correct under contention. The lock is not the bottleneck at the throughput one replica can reach.
-
-**What broke at 50/s, and what changed after the first run.** The replica reached 99% CPU. Requests queued while each held a database connection, Npgsql opened connections up to its default pool size of 100, and the B1MS server (`max_connections` = 50, some reserved by Azure) refused or timed out. 1760 of 2039 requests failed after up to 37 seconds; the app log showed `Database.Connection` errors and `TimeoutException`s. Two changes:
-
-1. **Load shedding on the capture route**: at most 16 captures at once, a queue of 50, and `503` with `Retry-After: 2` beyond that. Webhook senders retry on 503. The API and the hub are not affected.
-2. **Npgsql pool capped at 20 connections**, safely below the server limit.
-
-**Effect.** At the same 50/s, 3044 of 3750 requests were stored and the other 706 were turned away with 503 within the queue time. There were no server errors (the app log is clean, and Application Insights shows only 200 and 503). CPU was still at 100%, so one 0.25 vCPU replica stores about **40 captures per second**. Live notifications kept arriving for every stored request, within 1.6 s at p95 under full load.
-
-**Limits of this test.** It ran from one machine against one replica, with raised rate limits. In normal operation the per-token (120/min) and per-IP (300/min) limits stop a single sender long before this point. More throughput needs more CPU per replica, or several replicas with a SignalR backplane ([ADR 0004](docs/decisions/0004-one-replica-per-revision.md)). A shorter queue would lower the latency of accepted requests under overload, at the cost of more 503s.
+Setup, all numbers, how the outcomes are counted and how to run it yourself: [docs/performance.md](docs/performance.md).

@@ -22,11 +22,18 @@ if (tokens.length === 0) {
   throw new Error('Set TOKENS to one or more capture tokens.')
 }
 
-// Stored (200) is success; 429 is a deliberate limit, counted separately, not a failure.
-http.setResponseCallback(http.expectedStatuses(200, 429))
+// Every response is one of four outcomes:
+//   stored       200: the capture was saved
+//   rateLimited  429: a rate limit or the endpoint quota said no, on purpose
+//   shed         503: load shedding turned the request away quickly (Retry-After), on purpose
+//   failed       anything else, including timeouts and 500s: a real failure
+// Only `failed` counts against the test. Older result files (before 2026-05-30) have no
+// `shed` field and count 503 under `failed`; see docs/performance.md.
+http.setResponseCallback(http.expectedStatuses(200, 429, 503))
 
 const stored = new Counter('captures_stored')
 const rateLimited = new Counter('captures_429')
+const shed = new Counter('captures_503')
 const failed = new Counter('captures_failed')
 const storedDuration = new Trend('capture_duration_stored', true)
 
@@ -62,11 +69,13 @@ export default function () {
     storedDuration.add(response.timings.duration)
   } else if (response.status === 429) {
     rateLimited.add(1)
+  } else if (response.status === 503) {
+    shed.add(1)
   } else {
     failed.add(1)
   }
 
-  check(response, { 'stored or rate limited': (r) => r.status === 200 || r.status === 429 })
+  check(response, { 'stored, rate limited or shed': (r) => [200, 429, 503].includes(r.status) })
 }
 
 export function handleSummary(data) {
@@ -82,6 +91,7 @@ export function handleSummary(data) {
     requests: value('http_reqs', 'count'),
     stored: value('captures_stored', 'count') || 0,
     rateLimited: value('captures_429', 'count') || 0,
+    shed: value('captures_503', 'count') || 0,
     failed: value('captures_failed', 'count') || 0,
     storedLatencyMs: {
       median: value('capture_duration_stored', 'med'),
@@ -92,7 +102,8 @@ export function handleSummary(data) {
   }
   const text =
     `\n${label}: ${result.requests} requests at ${rate}/s for ${duration} over ${tokens.length} endpoint(s)\n` +
-    `  stored ${result.stored}, rate limited or quota (429) ${result.rateLimited}, failed ${result.failed}\n` +
+    `  stored ${result.stored}, rate limited or quota (429) ${result.rateLimited}, ` +
+    `shed under load (503) ${result.shed}, failed ${result.failed}\n` +
     `  stored latency ms: median ${fmt(result.storedLatencyMs.median)}, p95 ${fmt(result.storedLatencyMs.p95)}, ` +
     `p99 ${fmt(result.storedLatencyMs.p99)}, max ${fmt(result.storedLatencyMs.max)}\n`
   return {
