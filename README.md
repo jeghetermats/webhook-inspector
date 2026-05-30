@@ -1,5 +1,7 @@
 # Webhook Inspector
 
+[![CI](https://github.com/jeghetermats/webhook-inspector/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jeghetermats/webhook-inspector/actions/workflows/ci.yml)
+
 Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request sent to that URL is stored and shows up live in the browser, where it can be filtered, inspected byte for byte, exported as `curl` or replayed to your own server. Useful when building against GitHub, Stripe or Slack webhooks and you want to see exactly what they send.
 
 **[Try the demo](https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io/demo)** (made-up data, runs in your browser, no sign-in) or [sign in](https://ca-webhook-inspector.blueriver-b0d3312f.norwayeast.azurecontainerapps.io) to create real endpoints.
@@ -13,9 +15,9 @@ Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request
 ## Highlights
 
 - **Correct under concurrency.** Quotas are enforced under a per-endpoint row lock, tested with parallel requests against a real Postgres ([ADR 0005](docs/decisions/0005-quota-under-endpoint-row-lock.md)).
-- **Live without losing anything.** SignalR only says "something arrived"; the database is the source of truth, and the UI catches up through keyset pagination after a disconnect ([ADR 0003](docs/decisions/0003-database-as-source-of-truth.md), [ADR 0010](docs/decisions/0010-live-view-contract.md)).
-- **Captured data never reaches telemetry.** A trace processor strips everything but an allowlist on the capture route, and a script checks the live logs for a planted secret ([live secret check](#live-secret-check)).
-- **Replay without SSRF.** A stored request can be sent again to any public URL, but never to `localhost`, private networks or the cloud metadata service, whatever the notation, DNS answer or redirect. The address is checked at connect time, so DNS rebinding has no gap to use ([ADR 0013](docs/decisions/0013-replay-with-ssrf-protection.md)).
+- **Live updates that recover from disconnects.** SignalR only says "something arrived"; the database is the source of truth, and after a reconnect the UI reloads the stored history through keyset pagination, so a missed notification does not mean a missed request ([ADR 0003](docs/decisions/0003-database-as-source-of-truth.md), [ADR 0010](docs/decisions/0010-live-view-contract.md)).
+- **Captured data kept out of telemetry.** On the capture route a trace processor keeps only an allowlist of fields. Tests check the app's logs and traces, and a script searches the live service's logs for a planted secret ([live secret check](#live-secret-check)).
+- **Replay with SSRF protection.** A stored request can be sent again to a public URL. Addresses on `localhost`, private networks and the cloud metadata service are blocked, and tests cover decimal, hex, octal and IPv6-mapped notations, DNS answers and redirects. The address is checked when the connection is made, which closes the gap DNS rebinding relies on ([ADR 0013](docs/decisions/0013-replay-with-ssrf-protection.md)).
 - **Isolation between users.** Every query is scoped to the signed-in user, and another user's resources answer `404`, covered by tests for every route.
 - **Measured, not guessed.** A load test found where one small replica breaks. Load shedding and a capped connection pool then replaced 37-second timeouts with fast `503` responses, and 81% of requests were still stored at that load ([results](#load-test)).
 - **Cheap to run.** Scale to zero, a burstable database, an ingestion cap on logs and a budget alert.
