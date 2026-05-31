@@ -19,6 +19,10 @@ param postgresAdminLogin string = 'webhookadmin'
 @description('Postgres administrator password.')
 param postgresAdminPassword string
 
+@secure()
+@description('Password of the least-privilege role the app and the cleanup job connect as (ADR 0014).')
+param postgresAppPassword string
+
 @description('Postgres major version.')
 param postgresVersion string = '17'
 
@@ -72,8 +76,9 @@ module apps 'modules/containerapps.bicep' = {
     appInsightsName: monitoring.outputs.appInsightsName
     postgresHost: postgres.outputs.host
     databaseName: postgres.outputs.databaseName
-    postgresUser: postgresAdminLogin
-    postgresPassword: postgresAdminPassword
+    postgresAdminUser: postgresAdminLogin
+    postgresAdminPassword: postgresAdminPassword
+    postgresAppPassword: postgresAppPassword
     appImage: appImage
     migrateImage: migrateImage
     githubClientId: githubClientId

@@ -54,6 +54,20 @@ builder.Services.AddAppForwardedHeaders(builder.Configuration);
 
 var app = builder.Build();
 
+// `dotnet WebhookInspector.Api.dll setup-db-role`: create or update the app's least-privilege
+// database role and exit. Run by the migrate job as the administrator, right after the
+// migrations (ADR 0014).
+if (args is ["setup-db-role", ..])
+{
+    var roleName = app.Configuration["Database:AppRole"] ?? AppDatabaseRole.DefaultName;
+    var password = app.Configuration["Database:AppRolePassword"]
+        ?? throw new InvalidOperationException("Database:AppRolePassword is not set.");
+    await AppDatabaseRole.EnsureAsync(app.Configuration.GetConnectionString("Postgres")!, roleName, password);
+    app.Logger.LogInformation("Database role {Role} is up to date", roleName);
+    await app.DisposeAsync();
+    return;
+}
+
 // `dotnet WebhookInspector.Api.dll cleanup`: run the retention cleanup once and exit. Used by
 // the scheduled cleanup job, which runs the same image with this argument (ADR 0009).
 if (args is ["cleanup", ..])

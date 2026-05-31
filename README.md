@@ -17,6 +17,7 @@ Sign in with GitHub, create an endpoint and get a unique URL. Every HTTP request
 - **Correct under concurrency.** Quotas are enforced under a per-endpoint row lock, tested with parallel requests against a real Postgres ([ADR 0005](docs/decisions/0005-quota-under-endpoint-row-lock.md)).
 - **Live updates that recover from disconnects.** SignalR only says "something arrived"; the database is the source of truth, and after a reconnect the UI reloads the stored history through keyset pagination, so a missed notification does not mean a missed request ([ADR 0003](docs/decisions/0003-database-as-source-of-truth.md), [ADR 0010](docs/decisions/0010-live-view-contract.md)).
 - **Captured data kept out of telemetry.** On the capture route a trace processor keeps only an allowlist of fields. Tests check the app's logs and traces, and a script searches the live service's logs for a planted secret ([live secret check](#live-secret-check)).
+- **Least-privilege database access.** The app connects as a role that can only read and write rows. Schema changes run in a separate migration job, and the whole API test suite runs as the restricted role ([ADR 0014](docs/decisions/0014-least-privilege-database-role.md)).
 - **Replay with SSRF protection.** A stored request can be sent again to a public URL. Addresses on `localhost`, private networks and the cloud metadata service are blocked, and tests cover decimal, hex, octal and IPv6-mapped notations, DNS answers and redirects. The address is checked when the connection is made, which closes the gap DNS rebinding relies on ([ADR 0013](docs/decisions/0013-replay-with-ssrf-protection.md)).
 - **Isolation between users.** Every query is scoped to the signed-in user, and another user's resources answer `404`, covered by tests for every route.
 - **Measured, not guessed.** A load test found where one small replica breaks. Load shedding and a capped connection pool then replaced 37-second timeouts with fast `503` responses, and 81% of requests were still stored at that load ([results](#load-test)).
@@ -60,7 +61,7 @@ flowchart LR
   deploy --> app
 ```
 
-One ASP.NET Core app serves the capture route, the JSON API, the SignalR hub and the built React app from the same origin, so the session cookie never has to cross origins. A capture request goes through rate limiting and load shedding, has its body read with a size limit before any database work, and is stored in one short transaction that locks the endpoint row and checks the quota. After the commit the owner's browser gets a small notification and fetches the details itself. Migrations and retention cleanup run as separate Container Apps jobs, so the app never changes the schema or deletes data on its own. The design and its trade-offs are in [docs/PLAN.md](docs/PLAN.md) and the [decision records](docs/decisions).
+One ASP.NET Core app serves the capture route, the JSON API, the SignalR hub and the built React app from the same origin, so the session cookie never has to cross origins. A capture request goes through rate limiting and load shedding, has its body read with a size limit before any database work, and is stored in one short transaction that locks the endpoint row and checks the quota. After the commit the owner's browser gets a small notification and fetches the details itself. Migrations and retention cleanup run as separate Container Apps jobs. The app connects as a database role that cannot change the schema at all; only the migrate job uses the administrator. The design and its trade-offs are in [docs/PLAN.md](docs/PLAN.md) and the [decision records](docs/decisions).
 
 ## Tech stack
 
@@ -164,7 +165,7 @@ Everything runs in one resource group, `rg-webhook-inspector` (Norway East), def
 | Resource | Setting |
 |---|---|
 | Container App `ca-webhook-inspector` | 0.25 vCPU, 0.5 GiB, 0 to 1 replicas, external HTTPS ingress |
-| Container Apps Job `caj-webhook-inspector-migrate` | Manual trigger, runs the EF Core migration bundle from the image |
+| Container Apps Job `caj-webhook-inspector-migrate` | Manual trigger, runs the EF Core migration bundle from the image, then updates the app's database role |
 | Container Apps Job `caj-webhook-inspector-cleanup` | Every hour at :17, deletes requests older than 7 days ([ADR 0009](docs/decisions/0009-cleanup-as-a-scheduled-job.md)) |
 | Workbook "Webhook Inspector operations" | Capture traffic by status, latency p50/p95/p99, server errors, cleanup runs, failures that need attention |
 | PostgreSQL Flexible Server | Burstable B1MS, 32 GB, Postgres 17 |
@@ -174,7 +175,7 @@ Everything runs in one resource group, `rg-webhook-inspector` (Norway East), def
 ### Pipelines
 
 - **CI** (`ci.yml`): every push and pull request. Backend tests with Testcontainers, frontend lint/typecheck/tests/build, Playwright end-to-end tests against the real app and Postgres, Bicep build and Docker build.
-- **Deploy** (`deploy.yml`): after CI succeeds on `main`. Pushes the image to GHCR, runs the migrate job with the new image, then updates the app ([ADR 0008](docs/decisions/0008-migrations-as-a-separate-job.md)).
+- **Deploy** (`deploy.yml`): after CI succeeds on `main`. Pushes the image to GHCR, runs the migrate job with the new image (migrations, then the app's database role), then updates the app ([ADR 0008](docs/decisions/0008-migrations-as-a-separate-job.md)).
 - **Infra** (`infra.yml`): manual. Deploys the Bicep and keeps the app on its current image.
 
 Both deploying workflows log in to Azure with OIDC through a managed identity, so no Azure credential is stored in GitHub ([ADR 0012](docs/decisions/0012-managed-identity-for-deploy-login.md)).
@@ -185,7 +186,8 @@ Both deploying workflows log in to Azure with OIDC through a managed identity, s
 |---|---|---|
 | Variable | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | OIDC login (managed identity `id-github-deploy`) |
 | Variable | `BUDGET_ALERT_EMAIL` | Where budget alerts go. Empty skips the budget |
-| Secret | `POSTGRES_ADMIN_PASSWORD` | Database administrator password |
+| Secret | `POSTGRES_ADMIN_PASSWORD` | Database administrator password. Only the migrate job uses it |
+| Secret | `POSTGRES_APP_PASSWORD` | Password of `webhook_app`, the role the app and the cleanup job use ([ADR 0014](docs/decisions/0014-least-privilege-database-role.md)) |
 | Variable | `GH_OAUTH_CLIENT_ID` | Production GitHub OAuth app. Empty disables sign-in (`503`) |
 | Secret | `GH_OAUTH_CLIENT_SECRET` | Production GitHub OAuth app secret |
 
@@ -193,7 +195,7 @@ Both deploying workflows log in to Azure with OIDC through a managed identity, s
 
 1. Push to `main`. CI runs, then Deploy builds and pushes the image. Its deploy step warns that the infrastructure does not exist yet; that is expected.
 2. Make the image public: GitHub profile → **Packages** → the package → **Package settings** → **Change visibility** → Public. Container Apps pulls it without credentials. The image contains no secrets.
-3. Run the **Infra** workflow (Actions → Infra → Run workflow). The first run takes 10 to 15 minutes, mostly for Postgres. The run summary shows the app URL.
+3. Set `POSTGRES_ADMIN_PASSWORD` and `POSTGRES_APP_PASSWORD` to two long random values, then run the **Infra** workflow (Actions → Infra → Run workflow). The first run takes 10 to 15 minutes, mostly for Postgres. The run summary shows the app URL.
 4. Create the production GitHub OAuth app with the redirect URI `<app URL>/signin-github`, set `GH_OAUTH_CLIENT_ID` and `GH_OAUTH_CLIENT_SECRET`, and run **Infra** again.
 5. Run the live secret check below. **Do not send real webhook data before it passes.**
 
@@ -213,7 +215,6 @@ Create an endpoint called "leak check" in the live UI and pass the last part of 
 ### Known limitations (v1)
 
 - Postgres accepts connections from any Azure service (Consumption Container Apps have no fixed outbound IP). TLS and the password protect it; private networking is a v2 improvement.
-- The app connects as the Postgres administrator. A separate least-privilege role is a v2 improvement.
 - Data Protection keys are stored unencrypted in the database (see [ADR 0002](docs/decisions/0002-cookie-authentication.md)).
 - The first request after a quiet period has a cold start of a few seconds ([ADR 0007](docs/decisions/0007-scale-to-zero.md)).
 - Replay cannot reach `localhost` or ports other than 80 and 443, by design. To replay to your own machine, expose it through a tunnel such as ngrok or Cloudflare Tunnel.

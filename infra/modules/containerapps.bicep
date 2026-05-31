@@ -5,10 +5,17 @@ param workspaceName string
 param appInsightsName string
 param postgresHost string
 param databaseName string
-param postgresUser string
+param postgresAdminUser string
 
 @secure()
-param postgresPassword string
+param postgresAdminPassword string
+
+// The app and the cleanup job connect as this role; only the migrate job uses the
+// administrator, and it creates the role after each migration (ADR 0014).
+param postgresAppUser string = 'webhook_app'
+
+@secure()
+param postgresAppPassword string
 
 param appImage string
 param migrateImage string
@@ -32,7 +39,9 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = {
 // and logs an error because the image has no libgssapi.
 // Maximum Pool Size=20: B1MS allows 50 connections (some reserved by Azure). Npgsql's default
 // of 100 let an overloaded replica open more than the server accepts (phase 6 load test).
-var postgresConnection = 'Host=${postgresHost};Database=${databaseName};Username=${postgresUser};Password=${postgresPassword};SSL Mode=VerifyFull;GSS Encryption Mode=Disable;Maximum Pool Size=20'
+var postgresOptions = 'SSL Mode=VerifyFull;GSS Encryption Mode=Disable;Maximum Pool Size=20'
+var postgresConnection = 'Host=${postgresHost};Database=${databaseName};Username=${postgresAppUser};Password=${postgresAppPassword};${postgresOptions}'
+var postgresAdminConnection = 'Host=${postgresHost};Database=${databaseName};Username=${postgresAdminUser};Password=${postgresAdminPassword};${postgresOptions}'
 
 var hasGitHub = !empty(githubClientId) && !empty(githubClientSecret)
 
@@ -167,7 +176,9 @@ resource app 'Microsoft.App/containerApps@2026-03-02-preview' = {
   }
 }
 
-// Applies EF Core migrations from the new image before the app is updated (ADR 0008).
+// Applies EF Core migrations from the new image before the app is updated (ADR 0008), then
+// creates or updates the app's database role and its grants (ADR 0014). The only part that
+// connects as the administrator.
 resource migrateJob 'Microsoft.App/jobs@2026-03-02-preview' = {
   name: 'caj-${name}-migrate'
   location: location
@@ -183,9 +194,10 @@ resource migrateJob 'Microsoft.App/jobs@2026-03-02-preview' = {
         replicaCompletionCount: 1
       }
       secrets: [
-        // postgresConnection is built from the @secure() password; the linter cannot see that through a variable.
+        // Built from the @secure() passwords; the linter cannot see that through a variable.
         #disable-next-line use-secure-value-for-secure-inputs
-        { name: 'postgres-connection', value: postgresConnection }
+        { name: 'postgres-admin-connection', value: postgresAdminConnection }
+        { name: 'postgres-app-password', value: postgresAppPassword }
       ]
     }
     template: {
@@ -193,13 +205,15 @@ resource migrateJob 'Microsoft.App/jobs@2026-03-02-preview' = {
         {
           name: 'migrate'
           image: migrateImage
-          command: ['/app/efbundle']
+          command: ['/bin/sh', '-c', '/app/efbundle && dotnet /app/WebhookInspector.Api.dll setup-db-role']
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
           }
           env: [
-            { name: 'ConnectionStrings__Postgres', secretRef: 'postgres-connection' }
+            { name: 'ConnectionStrings__Postgres', secretRef: 'postgres-admin-connection' }
+            { name: 'Database__AppRole', value: postgresAppUser }
+            { name: 'Database__AppRolePassword', secretRef: 'postgres-app-password' }
           ]
         }
       ]

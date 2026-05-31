@@ -61,6 +61,7 @@ jobs:
         env:
           APP_IMAGE: ${{ steps.image.outputs.image }}
           POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+          POSTGRES_APP_PASSWORD: ${{ secrets.POSTGRES_APP_PASSWORD }}
           GH_OAUTH_CLIENT_ID: ${{ vars.GH_OAUTH_CLIENT_ID }}
           GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
           BUDGET_ALERT_EMAIL: ${{ vars.BUDGET_ALERT_EMAIL }}
@@ -68,6 +69,10 @@ jobs:
           PERMITS_PER_TOKEN: ${{ vars.CAPTURE_PERMITS_PER_TOKEN_PER_MINUTE || '120' }}
           PERMITS_PER_IP: ${{ vars.CAPTURE_PERMITS_PER_IP_PER_MINUTE || '300' }}
         run: |
+          if [ -z "$POSTGRES_APP_PASSWORD" ]; then
+            echo "::error::Set the POSTGRES_APP_PASSWORD secret in the production environment (ADR 0014)."
+            exit 1
+          fi
           az deployment group create \
             --resource-group "$RESOURCE_GROUP" \
             --name "infra-${{ github.run_number }}" \
@@ -75,6 +80,7 @@ jobs:
             --parameters \
               appImage="$APP_IMAGE" \
               postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
+              postgresAppPassword="$POSTGRES_APP_PASSWORD" \
               githubClientId="$GH_OAUTH_CLIENT_ID" \
               githubClientSecret="$GH_OAUTH_CLIENT_SECRET" \
               budgetContactEmail="$BUDGET_ALERT_EMAIL" \
@@ -89,6 +95,15 @@ jobs:
 
       - name: Apply migrations
         run: bash .github/scripts/run-migration.sh "$RESOURCE_GROUP" "${{ steps.deploy.outputs.job }}" "${{ steps.image.outputs.image }}"
+
+      # Changed Container Apps secrets only reach a replica when it starts, so restart the
+      # running one. A replica scaled to zero picks them up on its next start anyway.
+      - name: Restart the app so it reads changed secrets
+        run: |
+          for revision in $(az containerapp revision list -g "$RESOURCE_GROUP" -n "$APP_NAME" --query "[?properties.active].name" -o tsv); do
+            az containerapp revision restart -g "$RESOURCE_GROUP" -n "$APP_NAME" --revision "$revision" -o none --only-show-errors \
+              || echo "::warning::Could not restart $revision"
+          done
 
       - name: Wait until healthy
         run: bash .github/scripts/wait-healthy.sh "${{ steps.deploy.outputs.url }}"
