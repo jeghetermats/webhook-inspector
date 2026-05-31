@@ -36,9 +36,12 @@ public static partial class AppDatabaseRole
         // are quoted by Postgres itself. DDL cannot take bind parameters directly.
         string[] templates =
         [
+            // An existing role only gets a new password. A non-superuser administrator (Azure Postgres 16+)
+            // is refused any ALTER ROLE that names NOSUPERUSER and the like, even to turn them off.
+            // The strict attributes are set by CREATE ROLE below.
             """
             SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = @role)
-                THEN format('ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', @role, @password)
+                THEN format('ALTER ROLE %I WITH LOGIN PASSWORD %L', @role, @password)
                 ELSE format('CREATE ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', @role, @password)
             END
             """,
