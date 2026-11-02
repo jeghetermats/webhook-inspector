@@ -73,7 +73,7 @@ var appEnv = concat(
 // environmentMode must be set explicitly: without it Azure creates an "express"
 // environment, which does not support jobs (ExpressEnvironmentResourceNotSupported).
 // The Consumption workload profile has the same pricing and free grant as before.
-resource environment 'Microsoft.App/managedEnvironments@2026-03-02-preview' = {
+resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
   name: 'cae-${name}'
   location: location
   properties: {
@@ -94,7 +94,7 @@ resource environment 'Microsoft.App/managedEnvironments@2026-03-02-preview' = {
   }
 }
 
-resource app 'Microsoft.App/containerApps@2026-03-02-preview' = {
+resource app 'Microsoft.App/containerApps@2026-07-01' = {
   name: 'ca-${name}'
   location: location
   properties: {
@@ -179,7 +179,7 @@ resource app 'Microsoft.App/containerApps@2026-03-02-preview' = {
 // Applies EF Core migrations from the new image before the app is updated (ADR 0008), then
 // creates or updates the app's database role and its grants (ADR 0014). The only part that
 // connects as the administrator.
-resource migrateJob 'Microsoft.App/jobs@2026-03-02-preview' = {
+resource migrateJob 'Microsoft.App/jobs@2026-07-01' = {
   name: 'caj-${name}-migrate'
   location: location
   properties: {
@@ -223,7 +223,7 @@ resource migrateJob 'Microsoft.App/jobs@2026-03-02-preview' = {
 
 // Deletes requests older than 7 days, every hour at :17 (ADR 0009). Runs the app image
 // with the 'cleanup' argument and works while the app itself has scaled to zero.
-resource cleanupJob 'Microsoft.App/jobs@2026-03-02-preview' = {
+resource cleanupJob 'Microsoft.App/jobs@2026-07-01' = {
   name: 'caj-${name}-cleanup'
   location: location
   properties: {
