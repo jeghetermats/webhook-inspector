@@ -43,7 +43,7 @@ param capturePermitsPerIpPerMinute int = 300
 param budgetContactEmail string = ''
 
 @description('First day of the month the budget starts. Must stay fixed after the first deploy.')
-param budgetStartDate string = '2026-03-01'
+param budgetStartDate string = '2026-10-01'
 
 var name = 'webhook-inspector'
 var suffix = uniqueString(resourceGroup().id)
